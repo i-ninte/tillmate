@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { FieldPlan, WorkPoint, MissionUploadState, MissionUploadProgress } from '../types/mission';
+import { FieldPlan, FieldPlanSummary, WorkPoint, MissionUploadState, MissionUploadProgress } from '../types/mission';
 
 interface MissionState {
   // Current field plan being edited
@@ -14,8 +14,8 @@ interface MissionState {
   // Upload progress
   uploadProgress: MissionUploadProgress;
 
-  // Saved plans (from backend)
-  savedPlans: FieldPlan[];
+  // Saved plans (from backend) - summaries for list view
+  savedPlans: FieldPlanSummary[];
 
   // Actions - Plan
   setCurrentPlan: (plan: FieldPlan | null) => void;
@@ -36,7 +36,7 @@ interface MissionState {
   resetUpload: () => void;
 
   // Actions - Saved Plans
-  setSavedPlans: (plans: FieldPlan[]) => void;
+  setSavedPlans: (plans: FieldPlanSummary[]) => void;
 
   reset: () => void;
 }

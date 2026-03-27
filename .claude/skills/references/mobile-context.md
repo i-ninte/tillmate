@@ -26,9 +26,12 @@
 | Screen | Status | Location |
 |--------|--------|----------|
 | Root layout | COMPLETE | `/mobile/app/_layout.tsx` |
+| Tabs layout | COMPLETE | `/mobile/app/(tabs)/_layout.tsx` |
 | Connection screen | COMPLETE | `/mobile/app/index.tsx` |
-| Field view screen | COMPLETE | `/mobile/app/field-view.tsx` |
-| Field planner screen | COMPLETE | `/mobile/app/field-planner.tsx` |
+| Field view screen (tab) | COMPLETE | `/mobile/app/(tabs)/field-view.tsx` |
+| Field planner screen (tab) | COMPLETE | `/mobile/app/(tabs)/field-planner.tsx` |
+| Saved plans screen (tab) | COMPLETE | `/mobile/app/(tabs)/saved-plans.tsx` |
+| Settings screen (tab) | COMPLETE | `/mobile/app/(tabs)/settings.tsx` |
 
 ### Zustand Stores
 | Store | Status | Location | Key State |
@@ -44,8 +47,8 @@
 | MavlinkService | NOT_STARTED | `/mobile/services/MavlinkService.ts` | UDP socket singleton |
 | MavlinkParser | NOT_STARTED | `/mobile/services/MavlinkParser.ts` | Bytes → messages |
 | MavlinkSender | NOT_STARTED | `/mobile/services/MavlinkSender.ts` | Messages → bytes |
-| missionCompiler | NOT_STARTED | `/mobile/services/missionCompiler.ts` | FieldPlan → MissionItems |
-| missionUploader | NOT_STARTED | `/mobile/services/missionUploader.ts` | Upload handshake |
+| missionCompiler | COMPLETE | `/mobile/services/missionCompiler.ts` | FieldPlan → MissionItems |
+| missionUploader | COMPLETE | `/mobile/services/missionUploader.ts` | Upload handshake |
 | telemetryLogger | NOT_STARTED | `/mobile/services/telemetryLogger.ts` | Batch log to backend |
 
 ### Dashboard Components
@@ -93,8 +96,8 @@
 ### Utils
 | Util | Status | Location |
 |------|--------|----------|
-| mavlinkBuilders | NOT_STARTED | `/mobile/utils/mavlinkBuilders.ts` |
-| mavlinkConstants | NOT_STARTED | `/mobile/utils/mavlinkConstants.ts` |
+| mavlinkBuilders | COMPLETE | `/mobile/utils/mavlinkBuilders.ts` |
+| mavlinkConstants | COMPLETE | `/mobile/utils/mavlinkConstants.ts` |
 | units | NOT_STARTED | `/mobile/utils/units.ts` |
 
 ### Hooks
@@ -113,8 +116,8 @@
 ### Tests
 | Test | Status | Location |
 |------|--------|----------|
-| MAVLink builder tests | NOT_STARTED | `/mobile/__tests__/mavlinkBuilders.test.ts` |
-| Mission compiler tests | NOT_STARTED | `/mobile/__tests__/missionCompiler.test.ts` |
+| MAVLink builder tests | COMPLETE | `/mobile/__tests__/mavlinkBuilders.test.ts` |
+| Mission compiler tests | COMPLETE | `/mobile/__tests__/missionCompiler.test.ts` |
 | Unit converter tests | NOT_STARTED | `/mobile/__tests__/units.test.ts` |
 
 ---
@@ -163,17 +166,25 @@
 | 2026-03-26 | Fixed Expo Router entry point | package.json (main: expo-router/entry) |
 | 2026-03-26 | Fixed react-native-maps web error | FieldMap.tsx (conditional import) |
 | 2026-03-26 | Fixed Reanimated web error | field-planner.tsx (conditional WorkPointEditor import, Modal for web) |
+| 2026-03-27 | Added tab navigation with 4 tabs | app/(tabs)/_layout.tsx, (tabs)/*.tsx |
+| 2026-03-27 | Implemented mission compiler | services/missionCompiler.ts |
+| 2026-03-27 | Implemented mission uploader | services/missionUploader.ts |
+| 2026-03-27 | Created MAVLink utilities | utils/mavlinkBuilders.ts, mavlinkConstants.ts |
+| 2026-03-27 | Added compact mode to FarmDashboard | components/dashboard/FarmDashboard.tsx, DashTile.tsx |
+| 2026-03-27 | Added Saved Plans screen | app/(tabs)/saved-plans.tsx |
+| 2026-03-27 | Added Settings screen | app/(tabs)/settings.tsx |
+| 2026-03-27 | Updated API with proper type transformations | api/missions.ts |
+| 2026-03-27 | Added unit tests | __tests__/missionCompiler.test.ts, mavlinkBuilders.test.ts |
 
 ---
 
 ## Known Issues / TODOs
 
-- MAVLink services not yet implemented (need UDP socket for DroneBridge)
-- missionCompiler.ts not yet implemented (convert WorkPoints to MAVLink items)
-- missionUploader.ts not yet implemented (MAVLink upload handshake)
-- Hooks not yet implemented
-- Tests not yet implemented
+- MAVLink UDP socket services not yet implemented (MavlinkService, MavlinkParser, MavlinkSender)
+- Hooks not yet implemented (useMavlinkService, useInterval, useTelemetryThrottle)
+- Telemetry logger not yet implemented
 - Map only works on mobile (web shows placeholder list)
+- Need to integrate mission compiler with actual MAVLink send when MavlinkService is ready
 
 ---
 

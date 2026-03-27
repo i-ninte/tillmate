@@ -16,8 +16,13 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" />
-        <Stack.Screen name="field-view" />
-        <Stack.Screen name="field-planner" />
+        <Stack.Screen
+          name="(tabs)"
+          options={{
+            headerShown: false,
+            animation: 'fade',
+          }}
+        />
       </Stack>
     </GestureHandlerRootView>
   );

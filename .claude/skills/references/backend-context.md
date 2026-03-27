@@ -29,7 +29,7 @@
 |------|--------|----------|
 | Alembic initialized | COMPLETE | `/backend/alembic/` |
 | env.py configured | COMPLETE | `/backend/alembic/env.py` |
-| Initial migration | NOT_STARTED | `/backend/alembic/versions/` |
+| Initial migration | COMPLETE | `/backend/alembic/versions/2e0aaa3b8c01_initial.py` |
 
 ### SQLAlchemy Models
 | Model | Status | Location | Table |
@@ -73,9 +73,10 @@
 ### Tests
 | Test | Status | Location |
 |------|--------|----------|
-| Machine API tests | NOT_STARTED | `/backend/tests/test_machines.py` |
-| Mission API tests | NOT_STARTED | `/backend/tests/test_missions.py` |
-| Telemetry API tests | NOT_STARTED | `/backend/tests/test_telemetry.py` |
+| Test fixtures (conftest) | COMPLETE | `/backend/tests/conftest.py` |
+| Machine API tests | COMPLETE | `/backend/tests/test_machines.py` |
+| Mission API tests | COMPLETE | `/backend/tests/test_missions.py` |
+| Telemetry API tests | COMPLETE | `/backend/tests/test_telemetry.py` |
 
 ---
 
@@ -227,14 +228,15 @@ alembic upgrade head
 | 2026-03-26 | Created all routers | routers/*.py |
 | 2026-03-26 | Set up Alembic | alembic/, alembic.ini |
 | 2026-03-26 | Updated .env | .env, .env.example |
+| 2026-03-27 | Generated initial migration | alembic/versions/2e0aaa3b8c01_initial.py |
+| 2026-03-27 | Added pytest test suite | tests/conftest.py, tests/test_*.py |
 
 ---
 
 ## Known Issues / TODOs
 
-- Initial Alembic migration not yet generated (run `alembic revision --autogenerate -m "initial"`)
-- Tests not yet implemented
-- Need to verify MySQL database exists and is accessible
+- Need to verify MySQL database exists and is accessible before running migrations
+- May need to install test dependencies: `pip install pytest pytest-asyncio httpx aiosqlite`
 
 ---
 

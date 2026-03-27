@@ -13,7 +13,11 @@ const BATTERY_CRITICAL_V = 42.0;
 const TEMP_WARN_C = 60;
 const TEMP_CRITICAL_C = 70;
 
-export default function FarmDashboard() {
+interface FarmDashboardProps {
+  compact?: boolean;
+}
+
+export default function FarmDashboard({ compact = false }: FarmDashboardProps) {
   const telemetry = useTelemetryStore();
   const isStale = selectIsStale(telemetry);
 
@@ -39,12 +43,70 @@ export default function FarmDashboard() {
     }
   };
 
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.container}
-    >
+  // In compact mode, show only essential tiles
+  const compactTiles = (
+    <>
+      {/* Battery */}
+      <DashTile
+        label="Battery"
+        value={getValue(telemetry.batteryVoltageV?.toFixed(1) ?? null)}
+        unit="V"
+        icon="battery-half"
+        color={Colors.tileBattery}
+        compact={compact}
+        warning={
+          telemetry.batteryVoltageV !== null &&
+          telemetry.batteryVoltageV < BATTERY_WARN_V
+        }
+        critical={
+          telemetry.batteryVoltageV !== null &&
+          telemetry.batteryVoltageV < BATTERY_CRITICAL_V
+        }
+      />
+
+      {/* GPS */}
+      <DashTile
+        label="GPS"
+        value={getValue(telemetry.gpsFixed ? 'Fixed' : 'No Fix')}
+        icon="navigate"
+        color={Colors.tileGps}
+        compact={compact}
+        warning={!telemetry.gpsFixed}
+      />
+
+      {/* Speed */}
+      <DashTile
+        label="Speed"
+        value={getValue(telemetry.speedKmh?.toFixed(1) ?? null)}
+        unit="km/h"
+        icon="speedometer"
+        color={Colors.tileSpeed}
+        compact={compact}
+      />
+
+      {/* Mode */}
+      <DashTile
+        label="Mode"
+        value={getValue(getModeLabel(telemetry.mode))}
+        icon="settings"
+        color={Colors.tileMode}
+        compact={compact}
+      />
+
+      {/* E-Stop */}
+      <DashTile
+        label="E-Stop"
+        value={getValue(telemetry.eStopActive ? 'ACTIVE' : 'Ready')}
+        icon="alert-circle"
+        color={telemetry.eStopActive ? Colors.estop : Colors.success}
+        compact={compact}
+        critical={telemetry.eStopActive}
+      />
+    </>
+  );
+
+  const fullTiles = (
+    <>
       {/* Battery */}
       <DashTile
         label="Battery"
@@ -137,6 +199,16 @@ export default function FarmDashboard() {
         color={telemetry.eStopActive ? Colors.estop : Colors.success}
         critical={telemetry.eStopActive}
       />
+    </>
+  );
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={[styles.container, compact && styles.containerCompact]}
+    >
+      {compact ? compactTiles : fullTiles}
     </ScrollView>
   );
 }
@@ -146,5 +218,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Layout.dashTileGap,
     paddingVertical: Layout.spacing.xs,
+  },
+  containerCompact: {
+    gap: Layout.spacing.sm,
   },
 });

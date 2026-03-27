@@ -39,11 +39,13 @@ export interface FieldPlanCreate {
   workPoints: Omit<WorkPoint, 'id'>[];
 }
 
-// For displaying in the UI
+// For displaying in the UI (from backend /missions/summaries)
 export interface FieldPlanSummary {
   id: number;
+  machineId: number;
   name: string;
-  pointCount: number;
+  notes: string | null;
+  workPointCount: number;  // Maps from backend point_count
   createdAt: string;
 }
 

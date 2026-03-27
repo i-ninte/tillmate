@@ -11,6 +11,7 @@ interface DashTileProps {
   color?: string;
   warning?: boolean;
   critical?: boolean;
+  compact?: boolean;
 }
 
 export default function DashTile({
@@ -21,6 +22,7 @@ export default function DashTile({
   color = Colors.primary,
   warning = false,
   critical = false,
+  compact = false,
 }: DashTileProps) {
   const displayValue = value === null ? '--' : value;
   const valueColor = critical
@@ -28,6 +30,22 @@ export default function DashTile({
     : warning
     ? Colors.warning
     : Colors.textPrimary;
+
+  if (compact) {
+    return (
+      <View style={styles.containerCompact}>
+        <View style={[styles.iconContainerCompact, { backgroundColor: color }]}>
+          <Ionicons name={icon} size={14} color={Colors.textPrimary} />
+        </View>
+        <View style={styles.compactContent}>
+          <Text style={[styles.valueCompact, { color: valueColor }]}>
+            {displayValue}
+            {unit && value !== null && <Text style={styles.unitCompact}>{unit}</Text>}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -55,6 +73,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  containerCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    borderRadius: Layout.radius.sm,
+    paddingHorizontal: Layout.spacing.sm,
+    paddingVertical: Layout.spacing.xs,
+    gap: Layout.spacing.xs,
+  },
   iconContainer: {
     width: 32,
     height: 32,
@@ -62,6 +89,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: Layout.spacing.xs,
+  },
+  iconContainerCompact: {
+    width: 24,
+    height: 24,
+    borderRadius: Layout.radius.round,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  compactContent: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
   },
   label: {
     fontSize: Layout.fontSize.xs,
@@ -74,11 +112,19 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: Layout.fontSize.lg,
-    fontWeight: Layout.fontWeight.bold,
+    fontWeight: '700',
+  },
+  valueCompact: {
+    fontSize: Layout.fontSize.sm,
+    fontWeight: '600',
   },
   unit: {
     fontSize: Layout.fontSize.xs,
     color: Colors.textSecondary,
     marginLeft: 2,
+  },
+  unitCompact: {
+    fontSize: Layout.fontSize.xs,
+    color: Colors.textSecondary,
   },
 });

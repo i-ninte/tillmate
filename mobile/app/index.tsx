@@ -15,10 +15,10 @@ import BigButton from '../components/common/BigButton';
 export default function ConnectionScreen() {
   const { connected, connecting, setConnecting } = useConnectionStore();
 
-  // Navigate to field-view when connected
+  // Navigate to tabs when connected
   useEffect(() => {
     if (connected) {
-      router.replace('/field-view');
+      router.replace('/(tabs)/field-view');
     }
   }, [connected]);
 
