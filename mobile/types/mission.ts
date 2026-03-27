@@ -27,6 +27,11 @@ export interface FieldPlan {
   name: string;             // Farmer-visible name
   notes?: string;           // Optional notes
   workPoints: WorkPoint[];  // Ordered list of work points
+  returnToHome: boolean;    // Return to starting position after mission
+  homeLocation?: {          // Starting position (first point or custom)
+    lat: number;
+    lon: number;
+  };
   createdAt?: string;       // ISO timestamp
   updatedAt?: string;       // ISO timestamp
 }

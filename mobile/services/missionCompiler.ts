@@ -85,6 +85,14 @@ function createRelayItem(seq: number, relay: number, on: boolean): MissionItemIn
 }
 
 /**
+ * Creates a NAV_RETURN_TO_LAUNCH mission item
+ * Machine will return to the home/starting location
+ */
+function createReturnToLaunchItem(seq: number): MissionItemInt {
+  return createBaseItem(seq, MavCmdNav.NAV_RETURN_TO_LAUNCH);
+}
+
+/**
  * Compiles a FieldPlan into a sequence of MAVLink mission items.
  *
  * For each work point, the mission sequence is:
@@ -142,6 +150,11 @@ export function compileMission(plan: FieldPlan): MissionItemInt[] {
     items.push(createServoItem(seq++, IMPLEMENT_PWM.RAISED));
   }
 
+  // Add Return to Launch if enabled
+  if (plan.returnToHome) {
+    items.push(createReturnToLaunchItem(seq++));
+  }
+
   return items;
 }
 
@@ -190,6 +203,11 @@ export function compileMissionCompact(plan: FieldPlan): MissionItemInt[] {
   items.push(createRelayItem(seq++, RELAY_CHANNEL.TILLER, false));
   items.push(createRelayItem(seq++, RELAY_CHANNEL.PUMP, false));
   items.push(createServoItem(seq++, IMPLEMENT_PWM.RAISED));
+
+  // Add Return to Launch if enabled
+  if (plan.returnToHome) {
+    items.push(createReturnToLaunchItem(seq++));
+  }
 
   return items;
 }

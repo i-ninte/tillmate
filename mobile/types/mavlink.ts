@@ -83,6 +83,9 @@ export interface Telemetry {
   eStopActive: boolean;
   mode: MachineMode;
 
+  // Accessories
+  headlightsOn: boolean;
+
   // Connection
   lastHeartbeatMs: number | null;
 }
@@ -192,6 +195,7 @@ export enum RelayState {
 export enum RelayChannel {
   TILLER = 0,
   PUMP = 1,
+  HEADLIGHTS = 2,
 }
 
 // Servo channel for implement

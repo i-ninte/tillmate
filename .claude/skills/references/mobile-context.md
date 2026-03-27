@@ -37,9 +37,9 @@
 | Store | Status | Location | Key State |
 |-------|--------|----------|-----------|
 | connectionStore | COMPLETE | `/mobile/store/connectionStore.ts` | `connected`, `lastHeartbeatMs` |
-| telemetryStore | COMPLETE | `/mobile/store/telemetryStore.ts` | All telemetry values |
-| controlStore | COMPLETE | `/mobile/store/controlStore.ts` | `tiller`, `pump`, `depth` |
-| missionStore | COMPLETE | `/mobile/store/missionStore.ts` | `fieldPlan`, `uploadState` |
+| telemetryStore | COMPLETE | `/mobile/store/telemetryStore.ts` | All telemetry values, `headlightsOn`, `satellites` |
+| controlStore | COMPLETE | `/mobile/store/controlStore.ts` | `tiller`, `pump`, `headlights`, `depth` |
+| missionStore | COMPLETE | `/mobile/store/missionStore.ts` | `fieldPlan`, `uploadState`, `returnToHome` |
 
 ### MAVLink Services
 | Service | Status | Location | Purpose |
@@ -175,6 +175,21 @@
 | 2026-03-27 | Added Settings screen | app/(tabs)/settings.tsx |
 | 2026-03-27 | Updated API with proper type transformations | api/missions.ts |
 | 2026-03-27 | Added unit tests | __tests__/missionCompiler.test.ts, mavlinkBuilders.test.ts |
+| 2026-03-27 | Added expo-location for GPS permissions | app.json, package.json |
+| 2026-03-27 | Fixed FieldMap to show real map (removed Google Maps requirement) | components/mission/FieldMap.tsx |
+| 2026-03-27 | Added location permission handling to FieldMap | components/mission/FieldMap.tsx |
+| 2026-03-27 | Added work point action prompt on add | components/mission/FieldMap.tsx |
+| 2026-03-27 | Added GPS satellites count to dashboard | components/dashboard/FarmDashboard.tsx |
+| 2026-03-27 | Added headlights control to telemetry and controls | store/telemetryStore.ts, store/controlStore.ts |
+| 2026-03-27 | Added headlights relay channel | types/mavlink.ts |
+| 2026-03-27 | Added headlights tile to dashboard | components/dashboard/FarmDashboard.tsx |
+| 2026-03-27 | Added headlights toggle button to control panel | components/controls/FarmControlPanel.tsx |
+| 2026-03-27 | Added Return to Home toggle to field planner | app/(tabs)/field-planner.tsx |
+| 2026-03-27 | Added returnToHome to FieldPlan type and missionStore | types/mission.ts, store/missionStore.ts |
+| 2026-03-27 | Added NAV_RETURN_TO_LAUNCH to mission compiler | services/missionCompiler.ts |
+| 2026-03-27 | Added machine location marker to FieldMap | components/mission/FieldMap.tsx |
+| 2026-03-27 | Added GPS status overlay to field-view | app/(tabs)/field-view.tsx |
+| 2026-03-27 | Added headlights color to colors.ts | constants/colors.ts |
 
 ---
 
@@ -183,8 +198,9 @@
 - MAVLink UDP socket services not yet implemented (MavlinkService, MavlinkParser, MavlinkSender)
 - Hooks not yet implemented (useMavlinkService, useInterval, useTelemetryThrottle)
 - Telemetry logger not yet implemented
-- Map only works on mobile (web shows placeholder list)
+- Map only works on mobile (web shows placeholder list with editing)
 - Need to integrate mission compiler with actual MAVLink send when MavlinkService is ready
+- Need to add Google Maps API key for production (currently using Apple Maps on iOS)
 
 ---
 

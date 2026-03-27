@@ -31,6 +31,10 @@ interface MissionState {
   // Actions - Selection
   selectWorkPoint: (id: string | null) => void;
 
+  // Actions - Return to Home
+  setReturnToHome: (enabled: boolean) => void;
+  setHomeLocation: (location: { lat: number; lon: number } | null) => void;
+
   // Actions - Upload
   setUploadProgress: (progress: Partial<MissionUploadProgress>) => void;
   resetUpload: () => void;
@@ -71,6 +75,7 @@ export const useMissionStore = create<MissionState>((set, get) => ({
         machineId,
         name,
         workPoints: [],
+        returnToHome: true,  // Default to true for safety
       },
       workPoints: [],
     });
@@ -132,6 +137,18 @@ export const useMissionStore = create<MissionState>((set, get) => ({
   }),
 
   selectWorkPoint: (id) => set({ selectedPointId: id }),
+
+  setReturnToHome: (enabled) => set((state) => ({
+    currentPlan: state.currentPlan
+      ? { ...state.currentPlan, returnToHome: enabled }
+      : null,
+  })),
+
+  setHomeLocation: (location) => set((state) => ({
+    currentPlan: state.currentPlan
+      ? { ...state.currentPlan, homeLocation: location ?? undefined }
+      : null,
+  })),
 
   setUploadProgress: (progress) => set((state) => ({
     uploadProgress: { ...state.uploadProgress, ...progress },

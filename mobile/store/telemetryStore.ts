@@ -33,6 +33,9 @@ const nullTelemetry: Telemetry = {
   eStopActive: false,
   mode: MachineMode.UNKNOWN,
 
+  // Accessories
+  headlightsOn: false,
+
   // Connection
   lastHeartbeatMs: null,
 };

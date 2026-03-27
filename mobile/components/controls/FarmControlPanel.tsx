@@ -16,12 +16,16 @@ export default function FarmControlPanel({
   const {
     tillerOn,
     pumpOn,
+    headlightsOn,
     tillerPending,
     pumpPending,
+    headlightsPending,
     setTiller,
     setPump,
+    setHeadlights,
     setTillerPending,
     setPumpPending,
+    setHeadlightsPending,
   } = useControlStore();
 
   const eStopActive = useTelemetryStore((s) => s.eStopActive);
@@ -50,6 +54,18 @@ export default function FarmControlPanel({
     }, 500);
   };
 
+  const handleHeadlightsToggle = async () => {
+    setHeadlightsPending(true);
+
+    // TODO: Send MAVLink command via MavlinkService
+    // MAV_CMD_DO_SET_RELAY with relay=2, state=!headlightsOn
+
+    // Simulate for now
+    setTimeout(() => {
+      setHeadlights(!headlightsOn);
+    }, 500);
+  };
+
   // Disable controls if E-Stop is active
   const controlsDisabled = eStopActive;
 
@@ -73,6 +89,15 @@ export default function FarmControlPanel({
           isPending={pumpPending}
           onToggle={handlePumpToggle}
           disabled={controlsDisabled}
+        />
+
+        <RelayButton
+          label="Lights"
+          icon="flashlight"
+          isOn={headlightsOn}
+          isPending={headlightsPending}
+          onToggle={handleHeadlightsToggle}
+          disabled={false}
         />
 
         {/* Plan Mission Button */}

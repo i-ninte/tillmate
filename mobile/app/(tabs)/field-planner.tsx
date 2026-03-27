@@ -29,6 +29,7 @@ export default function FieldPlannerScreen() {
     selectedPointId,
     updateWorkPoint,
     removeWorkPoint,
+    setReturnToHome,
   } = useMissionStore();
   const [isSending, setIsSending] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
@@ -238,6 +239,35 @@ export default function FieldPlannerScreen() {
         </View>
       </View>
 
+      {/* Return to Home Toggle */}
+      <TouchableOpacity
+        style={styles.returnHomeToggle}
+        onPress={() => setReturnToHome(!(currentPlan?.returnToHome ?? true))}
+      >
+        <Ionicons
+          name={currentPlan?.returnToHome !== false ? 'home' : 'home-outline'}
+          size={24}
+          color={currentPlan?.returnToHome !== false ? Colors.primary : Colors.textSecondary}
+        />
+        <View style={styles.returnHomeInfo}>
+          <Text style={styles.returnHomeLabel}>Return to Start</Text>
+          <Text style={styles.returnHomeDescription}>
+            Machine returns to starting point after completing route
+          </Text>
+        </View>
+        <View style={[
+          styles.returnHomeSwitch,
+          currentPlan?.returnToHome !== false && styles.returnHomeSwitchActive,
+        ]}>
+          <Text style={[
+            styles.returnHomeSwitchText,
+            currentPlan?.returnToHome !== false && styles.returnHomeSwitchTextActive,
+          ]}>
+            {currentPlan?.returnToHome !== false ? 'ON' : 'OFF'}
+          </Text>
+        </View>
+      </TouchableOpacity>
+
       {/* Action Buttons */}
       <View style={styles.actions}>
         <BigButton
@@ -313,6 +343,49 @@ const styles = StyleSheet.create({
   actions: {
     paddingHorizontal: Layout.spacing.lg,
     paddingBottom: Layout.spacing.lg,
+  },
+  returnHomeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    marginHorizontal: Layout.spacing.md,
+    marginBottom: Layout.spacing.md,
+    padding: Layout.spacing.md,
+    borderRadius: Layout.radius.md,
+    gap: Layout.spacing.md,
+  },
+  returnHomeInfo: {
+    flex: 1,
+  },
+  returnHomeLabel: {
+    fontSize: Layout.fontSize.md,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  returnHomeDescription: {
+    fontSize: Layout.fontSize.xs,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  returnHomeSwitch: {
+    backgroundColor: Colors.surfaceLight,
+    paddingHorizontal: Layout.spacing.md,
+    paddingVertical: Layout.spacing.sm,
+    borderRadius: Layout.radius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  returnHomeSwitchActive: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  returnHomeSwitchText: {
+    fontSize: Layout.fontSize.sm,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  returnHomeSwitchTextActive: {
+    color: Colors.textPrimary,
   },
   // Web modal styles
   modalOverlay: {

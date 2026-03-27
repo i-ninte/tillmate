@@ -14,7 +14,15 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tillmate.app"
+      "bundleIdentifier": "com.tillmate.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "TillMate needs your location to show your position on the field map and plan routes.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "TillMate needs your location to track the machine during field operations.",
+        "NSLocationAlwaysUsageDescription": "TillMate needs your location to track the machine during field operations."
+      },
+      "config": {
+        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+      }
     },
     "android": {
       "package": "com.tillmate.app",
@@ -25,17 +33,31 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
         "CHANGE_WIFI_STATE",
         "ACCESS_WIFI_STATE",
         "INTERNET"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/logo.jpeg",
       "bundler": "metro"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "TillMate needs your location to show your position on the field map.",
+          "locationAlwaysPermission": "TillMate needs your location to track machine operations.",
+          "locationWhenInUsePermission": "TillMate needs your location to show your position on the field map."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -47,10 +47,12 @@ export const Colors = {
   // Tile/dashboard colors
   tileBattery: '#4A7C23',
   tileGps: '#1976D2',
+  tileSatellite: '#1565C0',
   tileSpeed: '#7B1FA2',
   tileTemp: '#E65100',
   tileDepth: '#A67C3D',
   tileMode: '#0097A7',
+  tileHeadlights: '#FFC107',
 };
 
 // For light theme (future use)

@@ -67,11 +67,16 @@ export default function FarmDashboard({ compact = false }: FarmDashboardProps) {
       {/* GPS */}
       <DashTile
         label="GPS"
-        value={getValue(telemetry.gpsFixed ? 'Fixed' : 'No Fix')}
+        value={getValue(
+          telemetry.gpsFixed
+            ? `Fixed ${telemetry.satellites ?? '?'}`
+            : `No Fix ${telemetry.satellites ?? 0}`
+        )}
         icon="navigate"
         color={Colors.tileGps}
         compact={compact}
-        warning={!telemetry.gpsFixed}
+        warning={!telemetry.gpsFixed || (telemetry.satellites !== null && telemetry.satellites < 6)}
+        critical={telemetry.satellites !== null && telemetry.satellites < 3}
       />
 
       {/* Speed */}
@@ -90,6 +95,15 @@ export default function FarmDashboard({ compact = false }: FarmDashboardProps) {
         value={getValue(getModeLabel(telemetry.mode))}
         icon="settings"
         color={Colors.tileMode}
+        compact={compact}
+      />
+
+      {/* Headlights */}
+      <DashTile
+        label="Lights"
+        value={getValue(telemetry.headlightsOn ? 'ON' : 'OFF')}
+        icon={telemetry.headlightsOn ? 'flashlight' : 'flashlight-outline'}
+        color={telemetry.headlightsOn ? Colors.tileHeadlights : Colors.darkLight}
         compact={compact}
       />
 
@@ -127,10 +141,15 @@ export default function FarmDashboard({ compact = false }: FarmDashboardProps) {
       {/* GPS */}
       <DashTile
         label="GPS"
-        value={getValue(telemetry.gpsFixed ? 'Fixed' : 'No Fix')}
+        value={getValue(
+          telemetry.gpsFixed
+            ? `Fixed ${telemetry.satellites ?? '?'}`
+            : `No Fix ${telemetry.satellites ?? 0}`
+        )}
         icon="navigate"
         color={Colors.tileGps}
-        warning={!telemetry.gpsFixed}
+        warning={!telemetry.gpsFixed || (telemetry.satellites !== null && telemetry.satellites < 6)}
+        critical={telemetry.satellites !== null && telemetry.satellites < 3}
       />
 
       {/* Speed */}
@@ -189,6 +208,14 @@ export default function FarmDashboard({ compact = false }: FarmDashboardProps) {
         value={getValue(getModeLabel(telemetry.mode))}
         icon="settings"
         color={Colors.tileMode}
+      />
+
+      {/* Headlights */}
+      <DashTile
+        label="Lights"
+        value={getValue(telemetry.headlightsOn ? 'ON' : 'OFF')}
+        icon={telemetry.headlightsOn ? 'flashlight' : 'flashlight-outline'}
+        color={telemetry.headlightsOn ? Colors.tileHeadlights : Colors.darkLight}
       />
 
       {/* E-Stop */}

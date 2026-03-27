@@ -19,8 +19,17 @@ import { FieldMap } from '../../components/mission';
 export default function FieldViewScreen() {
   const connected = useConnectionStore((s) => s.connected);
   const clearTelemetry = useTelemetryStore((s) => s.clearAll);
+  const latDeg = useTelemetryStore((s) => s.latDeg);
+  const lonDeg = useTelemetryStore((s) => s.lonDeg);
+  const headingDeg = useTelemetryStore((s) => s.headingDeg);
+  const gpsFixed = useTelemetryStore((s) => s.gpsFixed);
   const { workPoints, currentPlan } = useMissionStore();
   const [showMap, setShowMap] = useState(true);
+
+  // Machine location from telemetry
+  const machineLocation = gpsFixed && latDeg !== null && lonDeg !== null
+    ? { lat: latDeg, lon: lonDeg }
+    : null;
 
   // Redirect to connection screen if disconnected
   useEffect(() => {
@@ -72,13 +81,41 @@ export default function FieldViewScreen() {
               <FieldMap
                 editable={false}
                 showPath={true}
-                initialRegion={{
-                  latitude: 37.7749,
-                  longitude: -122.4194,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }}
+                machineLocation={machineLocation}
+                machineHeading={headingDeg}
+                initialRegion={
+                  machineLocation
+                    ? {
+                        latitude: machineLocation.lat,
+                        longitude: machineLocation.lon,
+                        latitudeDelta: 0.01,
+                        longitudeDelta: 0.01,
+                      }
+                    : {
+                        latitude: 37.7749,
+                        longitude: -122.4194,
+                        latitudeDelta: 0.01,
+                        longitudeDelta: 0.01,
+                      }
+                }
               />
+
+              {/* GPS Status overlay */}
+              <View style={[
+                styles.gpsOverlay,
+                gpsFixed ? styles.gpsOverlayFixed : styles.gpsOverlayNoFix
+              ]}>
+                <Ionicons
+                  name={gpsFixed ? 'navigate' : 'navigate-outline'}
+                  size={16}
+                  color={gpsFixed ? Colors.success : Colors.warning}
+                />
+                <Text style={styles.gpsOverlayText}>
+                  {gpsFixed
+                    ? `GPS Fixed${machineLocation ? ` (${machineLocation.lat.toFixed(5)}, ${machineLocation.lon.toFixed(5)})` : ''}`
+                    : 'Waiting for GPS...'}
+                </Text>
+              </View>
 
               {/* Current plan info overlay */}
               {workPoints.length > 0 && (
@@ -159,6 +196,27 @@ const styles = StyleSheet.create({
     borderRadius: Layout.radius.md,
     overflow: 'hidden',
     position: 'relative',
+  },
+  gpsOverlay: {
+    position: 'absolute',
+    top: Layout.spacing.sm,
+    right: Layout.spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Layout.spacing.md,
+    paddingVertical: Layout.spacing.sm,
+    borderRadius: Layout.radius.md,
+    gap: Layout.spacing.xs,
+  },
+  gpsOverlayFixed: {
+    backgroundColor: 'rgba(74, 124, 35, 0.9)',
+  },
+  gpsOverlayNoFix: {
+    backgroundColor: 'rgba(230, 81, 0, 0.9)',
+  },
+  gpsOverlayText: {
+    fontSize: Layout.fontSize.xs,
+    color: Colors.textPrimary,
   },
   planOverlay: {
     position: 'absolute',
