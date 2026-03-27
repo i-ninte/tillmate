@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "TillMate",
+    "slug": "tillmate",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo.jpeg",
+    "userInterfaceStyle": "dark",
+    "scheme": "tillmate",
+    "splash": {
+      "image": "./assets/logo.jpeg",
+      "resizeMode": "contain",
+      "backgroundColor": "#121212"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tillmate.app"
+    },
+    "android": {
+      "package": "com.tillmate.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#121212",
+        "foregroundImage": "./assets/logo.jpeg"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CHANGE_WIFI_STATE",
+        "ACCESS_WIFI_STATE",
+        "INTERNET"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/logo.jpeg",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

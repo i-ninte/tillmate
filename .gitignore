@@ -1,2 +1,9 @@
 
 docs/
+*.env
+plan.md
+/backend/tillmate
+/backend/alembic
+*.pyc
+alembic.ini
+*.__pycache__

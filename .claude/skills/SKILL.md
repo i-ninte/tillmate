@@ -24,6 +24,10 @@ references:
   - references/09-react-native-structure.md
   - references/10-ui-design-rules.md
   - references/11-testing-guide.md
+context:
+  - references/mobile-context.md
+  - references/backend-context.md
+plan: plan.md
 ---
 
 # AgriMachine Controller — Master Skill
@@ -82,11 +86,18 @@ See `references/01-architecture.md` for full details.
 
 ## Reference File Index
 
+### Context Files (Read First)
+| File | Read When |
+|---|---|
+| `mobile-context.md` | **ALWAYS** — before any mobile work |
+| `backend-context.md` | **ALWAYS** — before any backend work |
+
+### Technical References
 | File | Read When |
 |---|---|
 | `01-architecture.md` | Starting any comms or protocol work |
 | `02-mavlink-commands.md` | Sending or receiving ANY MAVLink message |
-| `03-dronebridge-setup.md` | Configuring hardware / DroneBridge |
+| `03-dronebridge-setup.md` | Configuring hardware / DroneBridge ESP32 |
 | `04-telemetry-dashboard.md` | Building the status dashboard tiles |
 | `05-mission-planning.md` | Field path drawing or mission upload |
 | `06-realtime-controls.md` | Implement depth slider, tiller/pump buttons, E-stop |
@@ -137,3 +148,64 @@ See `references/01-architecture.md` for full details.
 - Mission Start must be disabled when GPS fix is absent or E-stop is active.
 - No screen may display raw MAVLink message IDs or parameter names to the user.
 - The depth slider sends its command ONLY on release (not on drag) to avoid rapid actuator commands.
+
+---
+
+## Codebase Context System (IMPORTANT — Read First)
+
+To avoid rescanning the entire codebase on every task, this project uses **context files** that track implementation status:
+
+| Context File | Purpose |
+|---|---|
+| `references/mobile-context.md` | Mobile app implementation status, file locations, patterns |
+| `references/backend-context.md` | Backend implementation status, endpoints, database schema |
+
+### How to Use Context Files
+
+**Before starting any task:**
+1. Read SKILL.md (this file)
+2. Read the relevant context file (`mobile-context.md` or `backend-context.md`)
+3. Read the specific reference file(s) for your task (see Reference File Index above)
+
+**This eliminates the need to scan the codebase** — the context files tell you:
+- What exists and where it is located
+- What's implemented vs. not started
+- Recent changes
+- Known issues
+
+### Mandatory: Update Context After Every Change
+
+**After completing any code change, you MUST update the context file:**
+
+1. **Update status**: Change `NOT_STARTED` → `IN_PROGRESS` → `COMPLETE`
+2. **Log the change**: Add entry to "Recent Changes" table with date and files modified
+3. **Add new files**: If you created new files, add them to the appropriate table
+4. **Track issues**: Add any bugs or TODOs to "Known Issues / TODOs"
+
+### Example Context Update
+
+```markdown
+# Before
+| MavlinkService | NOT_STARTED | `/mobile/services/MavlinkService.ts` |
+
+# After
+| MavlinkService | COMPLETE | `/mobile/services/MavlinkService.ts` |
+
+## Recent Changes
+| Date | Change | Files Modified |
+|------|--------|----------------|
+| 2024-01-15 | Implemented MavlinkService with UDP socket | MavlinkService.ts |
+```
+
+### Why This Matters
+
+- **Consistency**: Context files are the source of truth for what exists
+- **Efficiency**: No need to glob/grep the entire codebase each session
+- **Continuity**: New sessions pick up exactly where the last one left off
+- **Visibility**: User can see progress at a glance
+
+---
+
+## Development Plan
+
+See `plan.md` in the project root for the full development roadmap with phased tasks and checklists.
