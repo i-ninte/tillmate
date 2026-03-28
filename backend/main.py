@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
-from routers import machines, missions, telemetry
+from routers import machines, missions, telemetry, settings as settings_router
 
 
 @asynccontextmanager
@@ -47,6 +47,11 @@ app.include_router(
     telemetry.router,
     prefix=f"{settings.api_prefix}/telemetry",
     tags=["telemetry"],
+)
+app.include_router(
+    settings_router.router,
+    prefix=f"{settings.api_prefix}/settings",
+    tags=["settings"],
 )
 
 

@@ -6,6 +6,7 @@ import {
   Image,
   ActivityIndicator,
   Platform,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -14,6 +15,7 @@ import { Colors, Layout } from '../constants';
 import BigButton from '../components/common/BigButton';
 import { mavlinkService } from '../services/MavlinkService';
 import { machinesApi } from '../api/machines';
+import { settingsApi } from '../api/settings';
 
 /**
  * Get or create a machine in the backend based on MAVLink system ID
@@ -47,8 +49,35 @@ async function getOrCreateMachine(sysId: number, wifiSsid: string): Promise<numb
 }
 
 export default function ConnectionScreen() {
-  const { connected, connecting, connectionError, targetIp, targetPort, setConnecting, setConnected, setConnectionError, setMachineId, setMachineSystemId } = useConnectionStore();
+  const { connected, connecting, connectionError, simulationMode, targetIp, targetPort, setConnecting, setConnected, setConnectionError, setSimulationMode, setMachineId, setMachineSystemId } = useConnectionStore();
   const isRegistering = useRef(false);
+  const [isLoadingSettings, setIsLoadingSettings] = React.useState(true);
+
+  // Fetch simulation mode setting from backend on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const enabled = await settingsApi.getSimulationMode();
+        setSimulationMode(enabled);
+      } catch (error) {
+        console.warn('[Connection] Could not fetch settings from backend');
+        // Keep default simulation mode
+      } finally {
+        setIsLoadingSettings(false);
+      }
+    };
+    fetchSettings();
+  }, [setSimulationMode]);
+
+  // Handler for toggling simulation mode - saves to backend
+  const handleSimulationToggle = useCallback(async (enabled: boolean) => {
+    setSimulationMode(enabled);
+    try {
+      await settingsApi.setSimulationMode(enabled);
+    } catch (error) {
+      console.warn('[Connection] Could not save simulation mode to backend');
+    }
+  }, [setSimulationMode]);
 
   // Set up MavlinkService callbacks
   useEffect(() => {
@@ -98,25 +127,25 @@ export default function ConnectionScreen() {
     setConnecting(true);
     setConnectionError(null);
 
-    // Set target IP and port
-    mavlinkService.setTarget(targetIp, targetPort);
-
-    // For web, simulate connection (no UDP support)
-    if (Platform.OS === 'web') {
+    // Simulation mode or web: use mock connection with machineId = 1
+    if (simulationMode || Platform.OS === 'web') {
+      console.log('[Connection] Using simulation mode');
       setTimeout(() => {
+        setMachineSystemId(1);
+        setMachineId(1); // Default machine ID for simulation
         setConnected(true);
-        setMachineId(1);
       }, 1000);
       return;
     }
 
-    // Connect via MAVLink/UDP
+    // Real connection via MAVLink/UDP
+    mavlinkService.setTarget(targetIp, targetPort);
     const success = await mavlinkService.connect();
 
     if (!success) {
       setConnectionError('Could not connect to machine. Make sure you are on the machine\'s WiFi network.');
     }
-  }, [targetIp, targetPort, setConnecting, setConnectionError, setConnected, setMachineId]);
+  }, [simulationMode, targetIp, targetPort, setConnecting, setConnectionError, setConnected, setMachineId, setMachineSystemId]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -158,12 +187,29 @@ export default function ConnectionScreen() {
         {/* Connect Button */}
         <View style={styles.buttonContainer}>
           <BigButton
-            label={connecting ? 'Connecting...' : 'Connect to Machine'}
+            label={connecting ? 'Connecting...' : (simulationMode ? 'Connect (Simulation)' : 'Connect to Machine')}
             onPress={handleConnect}
             disabled={connecting}
             variant="primary"
           />
         </View>
+
+        {/* Simulation Mode Toggle */}
+        <View style={styles.simulationToggle}>
+          <Text style={styles.simulationLabel}>Simulation Mode</Text>
+          <Switch
+            value={simulationMode}
+            onValueChange={handleSimulationToggle}
+            trackColor={{ false: Colors.border, true: Colors.primary + '80' }}
+            thumbColor={simulationMode ? Colors.primary : Colors.textSecondary}
+            disabled={isLoadingSettings}
+          />
+        </View>
+        {simulationMode && (
+          <Text style={styles.simulationHint}>
+            Using simulated connection (machineId = 1)
+          </Text>
+        )}
 
         {/* Version */}
         <Text style={styles.version}>TillMate v1.0.0</Text>
@@ -231,7 +277,22 @@ const styles = StyleSheet.create({
   buttonContainer: {
     width: '100%',
     maxWidth: 300,
-    marginBottom: Layout.spacing.xl,
+    marginBottom: Layout.spacing.lg,
+  },
+  simulationToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Layout.spacing.sm,
+    marginBottom: Layout.spacing.xs,
+  },
+  simulationLabel: {
+    fontSize: Layout.fontSize.sm,
+    color: Colors.textSecondary,
+  },
+  simulationHint: {
+    fontSize: Layout.fontSize.xs,
+    color: Colors.textDisabled,
+    marginBottom: Layout.spacing.lg,
   },
   version: {
     fontSize: Layout.fontSize.sm,
