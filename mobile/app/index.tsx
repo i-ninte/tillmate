@@ -4,9 +4,9 @@ import {
   Text,
   StyleSheet,
   Image,
-  SafeAreaView,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useConnectionStore } from '../store';
 import { Colors, Layout } from '../constants';

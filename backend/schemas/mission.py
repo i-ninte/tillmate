@@ -22,12 +22,21 @@ class WorkPointResponse(WorkPointBase):
     model_config = {"from_attributes": True}
 
 
+class HomeLocation(BaseModel):
+    """Schema for home location coordinates."""
+
+    lat: float
+    lon: float
+
+
 class FieldPlanCreate(BaseModel):
     """Schema for creating a field plan."""
 
     machine_id: int
     name: str
     notes: str | None = None
+    return_to_home: bool = True
+    home_location: HomeLocation | None = None
     work_points: list[WorkPointBase]
 
 
@@ -38,6 +47,9 @@ class FieldPlanResponse(BaseModel):
     machine_id: int
     name: str
     notes: str | None
+    return_to_home: bool
+    home_lat: float | None
+    home_lon: float | None
     created_at: datetime
     updated_at: datetime
     work_points: list[WorkPointResponse]
@@ -52,6 +64,7 @@ class FieldPlanSummary(BaseModel):
     machine_id: int
     name: str
     notes: str | None
+    return_to_home: bool
     point_count: int
     created_at: datetime
 

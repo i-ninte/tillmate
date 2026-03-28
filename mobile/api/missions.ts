@@ -7,6 +7,7 @@ interface BackendFieldPlanSummary {
   machine_id: number;
   name: string;
   notes: string | null;
+  return_to_home: boolean;
   point_count: number;
   created_at: string;
 }
@@ -27,6 +28,9 @@ interface BackendFieldPlan {
   machine_id: number;
   name: string;
   notes: string | null;
+  return_to_home: boolean;
+  home_lat: number | null;
+  home_lon: number | null;
   created_at: string;
   updated_at: string;
   work_points: BackendWorkPoint[];
@@ -49,6 +53,10 @@ const transformFieldPlan = (plan: BackendFieldPlan): FieldPlan => ({
   machineId: plan.machine_id,
   name: plan.name,
   notes: plan.notes || undefined,
+  returnToHome: plan.return_to_home,
+  homeLocation: plan.home_lat !== null && plan.home_lon !== null
+    ? { lat: plan.home_lat, lon: plan.home_lon }
+    : undefined,
   createdAt: plan.created_at,
   updatedAt: plan.updated_at,
   workPoints: plan.work_points.map(transformWorkPoint),
@@ -59,6 +67,7 @@ const transformSummary = (summary: BackendFieldPlanSummary): FieldPlanSummary =>
   machineId: summary.machine_id,
   name: summary.name,
   notes: summary.notes,
+  returnToHome: summary.return_to_home,
   workPointCount: summary.point_count,
   createdAt: summary.created_at,
 });
@@ -73,6 +82,10 @@ export const missionsApi = {
       machine_id: data.machineId,
       name: data.name,
       notes: data.notes,
+      return_to_home: data.returnToHome ?? true,
+      home_location: data.homeLocation
+        ? { lat: data.homeLocation.lat, lon: data.homeLocation.lon }
+        : null,
       work_points: data.workPoints.map(wp => ({
         seq: wp.seq,
         lat: wp.lat,

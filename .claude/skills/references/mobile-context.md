@@ -190,6 +190,10 @@
 | 2026-03-27 | Added machine location marker to FieldMap | components/mission/FieldMap.tsx |
 | 2026-03-27 | Added GPS status overlay to field-view | app/(tabs)/field-view.tsx |
 | 2026-03-27 | Added headlights color to colors.ts | constants/colors.ts |
+| 2026-03-28 | Added cross-platform location (web + native) | components/mission/FieldMap.tsx |
+| 2026-03-28 | Updated API client for returnToHome, satellites, headlights | api/missions.ts |
+| 2026-03-28 | Updated types for backend integration | types/mission.ts |
+| 2026-03-28 | Added web location status display | components/mission/FieldMap.tsx |
 
 ---
 

@@ -134,6 +134,8 @@ field_plans
 ├── machine_id (FK → machines)
 ├── name
 ├── notes
+├── return_to_home (bool, default true)
+├── home_lat, home_lon (nullable)
 ├── created_at, updated_at
 
 work_points
@@ -152,12 +154,13 @@ telemetry_logs
 ├── session_id (UUID)
 ├── recorded_at
 ├── battery_voltage_v, battery_pct
-├── gps_fixed, lat, lon
-├── speed_kmh
+├── gps_fixed, lat, lon, satellites
+├── speed_kmh, heading_deg
 ├── pixhawk_temp_c, machine_temp_c
 ├── implement_depth_cm
 ├── estop_active
 ├── mode
+├── headlights_on
 
 command_logs
 ├── id (PK)
@@ -230,6 +233,10 @@ alembic upgrade head
 | 2026-03-26 | Updated .env | .env, .env.example |
 | 2026-03-27 | Generated initial migration | alembic/versions/2e0aaa3b8c01_initial.py |
 | 2026-03-27 | Added pytest test suite | tests/conftest.py, tests/test_*.py |
+| 2026-03-28 | Added return_to_home, home_lat, home_lon to FieldPlan | models/mission.py, schemas/mission.py |
+| 2026-03-28 | Added satellites, heading_deg, headlights_on to TelemetryLog | models/telemetry_log.py, schemas/telemetry_log.py |
+| 2026-03-28 | Updated MissionService for new fields | services/mission_service.py |
+| 2026-03-28 | Created migration for schema changes | alembic/versions/3f1bbb4c9d02_*.py |
 
 ---
 

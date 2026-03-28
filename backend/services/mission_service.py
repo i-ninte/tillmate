@@ -18,6 +18,9 @@ class MissionService:
             machine_id=data.machine_id,
             name=data.name,
             notes=data.notes,
+            return_to_home=data.return_to_home,
+            home_lat=data.home_location.lat if data.home_location else None,
+            home_lon=data.home_location.lon if data.home_location else None,
         )
 
         # Create work points
@@ -66,6 +69,7 @@ class MissionService:
                 FieldPlan.machine_id,
                 FieldPlan.name,
                 FieldPlan.notes,
+                FieldPlan.return_to_home,
                 FieldPlan.created_at,
                 func.count(WorkPoint.id).label("point_count"),
             )
@@ -86,6 +90,7 @@ class MissionService:
                 "machine_id": row.machine_id,
                 "name": row.name,
                 "notes": row.notes,
+                "return_to_home": row.return_to_home,
                 "point_count": row.point_count,
                 "created_at": row.created_at,
             }

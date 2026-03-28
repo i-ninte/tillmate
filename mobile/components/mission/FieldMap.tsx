@@ -10,10 +10,10 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { useMissionStore } from '../../store';
 import { WorkPoint, MapRegion } from '../../types';
 import { Colors, Layout } from '../../constants';
+import { locationService } from '../../utils/locationService';
 
 // Only import MapView on native platforms
 let MapView: any = null;
@@ -76,46 +76,47 @@ export default function FieldMap({
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
   const [mapRegion, setMapRegion] = useState<MapRegion>(initialRegion || DEFAULT_REGION);
 
-  // Request location permissions and get current location
+  // Request location permissions and get current location (cross-platform)
   useEffect(() => {
-    (async () => {
+    const getLocation = async () => {
       try {
         setIsLoadingLocation(true);
 
-        // Request permissions
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        const hasPermission = status === 'granted';
-        setLocationPermission(hasPermission);
+        // Request permissions using cross-platform service
+        const permissionResult = await locationService.requestPermissions();
+        setLocationPermission(permissionResult.granted);
 
-        if (hasPermission) {
-          // Get current location
-          const location = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.High,
-          });
+        if (permissionResult.granted) {
+          // Get current position
+          const position = await locationService.getCurrentPosition();
 
-          const userLocation = {
-            lat: location.coords.latitude,
-            lon: location.coords.longitude,
-          };
-          setCurrentLocation(userLocation);
-
-          // Set map region to user's location
-          const newRegion: MapRegion = {
-            latitude: userLocation.lat,
-            longitude: userLocation.lon,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-          };
-          setMapRegion(newRegion);
+          if (position) {
+            const userLocation = {
+              lat: position.coords.latitude,
+              lon: position.coords.longitude,
+            };
+            setCurrentLocation(userLocation);
+            setMapRegion({
+              latitude: userLocation.lat,
+              longitude: userLocation.lon,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
+            });
+          } else {
+            setMapRegion(initialRegion || DEFAULT_REGION);
+          }
+        } else {
+          setMapRegion(initialRegion || DEFAULT_REGION);
         }
       } catch (error) {
         console.error('Error getting location:', error);
-        // Use default region on error
         setMapRegion(initialRegion || DEFAULT_REGION);
       } finally {
         setIsLoadingLocation(false);
       }
-    })();
+    };
+
+    getLocation();
   }, []);
 
   // Handle map press to add new work point
@@ -244,7 +245,7 @@ export default function FieldMap({
 
   // Web version - interactive list with add/edit functionality
   if (Platform.OS === 'web') {
-    const handleAddPoint = () => {
+    const handleAddPoint = (useExactLocation = false) => {
       // Add a point near current location or default
       const baseLat = currentLocation?.lat || 37.7749;
       const baseLon = currentLocation?.lon || -122.4194;
@@ -252,8 +253,8 @@ export default function FieldMap({
       const newPoint: WorkPoint = {
         id: `wp-${Date.now()}`,
         seq: workPoints.length,
-        lat: baseLat + (Math.random() - 0.5) * 0.01,
-        lon: baseLon + (Math.random() - 0.5) * 0.01,
+        lat: useExactLocation ? baseLat : baseLat + (Math.random() - 0.5) * 0.001,
+        lon: useExactLocation ? baseLon : baseLon + (Math.random() - 0.5) * 0.001,
         implementLowered: false,
         tillerOn: false,
         pumpOn: false,
@@ -261,6 +262,17 @@ export default function FieldMap({
       };
       addWorkPoint(newPoint);
       onPointAdded?.(newPoint);
+
+      // Show action configuration prompt
+      if (editable && typeof window !== 'undefined') {
+        const configure = window.confirm(
+          `Point ${workPoints.length + 1} added!\n\nWould you like to configure machine actions for this point?`
+        );
+        if (configure) {
+          selectWorkPoint(newPoint.id);
+          onPointSelect?.(newPoint.id);
+        }
+      }
     };
 
     const handleToggleAction = (
@@ -282,11 +294,37 @@ export default function FieldMap({
         <View style={styles.webHeader}>
           <Text style={styles.webTitle}>Field Plan</Text>
           {editable && (
-            <TouchableOpacity style={styles.addButton} onPress={handleAddPoint}>
-              <Ionicons name="add-circle" size={24} color={Colors.primary} />
-              <Text style={styles.addButtonText}>Add Point</Text>
-            </TouchableOpacity>
+            <View style={styles.webHeaderButtons}>
+              {currentLocation && (
+                <TouchableOpacity style={styles.addButton} onPress={() => handleAddPoint(true)}>
+                  <Ionicons name="locate" size={20} color={Colors.primary} />
+                  <Text style={styles.addButtonText}>Add at My Location</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.addButton} onPress={() => handleAddPoint(false)}>
+                <Ionicons name="add-circle" size={20} color={Colors.primary} />
+                <Text style={styles.addButtonText}>Add Point</Text>
+              </TouchableOpacity>
+            </View>
           )}
+        </View>
+
+        {/* Location Status */}
+        <View style={styles.webLocationStatus}>
+          <Ionicons
+            name={currentLocation ? 'location' : 'location-outline'}
+            size={16}
+            color={currentLocation ? Colors.success : Colors.textSecondary}
+          />
+          <Text style={styles.webLocationText}>
+            {isLoadingLocation
+              ? 'Getting location...'
+              : currentLocation
+              ? `Your location: ${currentLocation.lat.toFixed(5)}, ${currentLocation.lon.toFixed(5)}`
+              : locationPermission === false
+              ? 'Location access denied. Enable in browser settings.'
+              : 'Location unavailable'}
+          </Text>
         </View>
 
         <Text style={styles.webSubtitle}>
@@ -407,8 +445,17 @@ export default function FieldMap({
         <TouchableOpacity
           style={styles.permissionButton}
           onPress={async () => {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            setLocationPermission(status === 'granted');
+            const result = await locationService.requestPermissions();
+            setLocationPermission(result.granted);
+            if (result.granted) {
+              const position = await locationService.getCurrentPosition();
+              if (position) {
+                setCurrentLocation({
+                  lat: position.coords.latitude,
+                  lon: position.coords.longitude,
+                });
+              }
+            }
           }}
         >
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
@@ -638,11 +685,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Layout.spacing.sm,
+    flexWrap: 'wrap',
+    gap: Layout.spacing.sm,
+  },
+  webHeaderButtons: {
+    flexDirection: 'row',
+    gap: Layout.spacing.sm,
+    flexWrap: 'wrap',
   },
   webTitle: {
     fontSize: Layout.fontSize.xl,
     fontWeight: '700',
     color: Colors.textPrimary,
+  },
+  webLocationStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surfaceLight,
+    paddingHorizontal: Layout.spacing.md,
+    paddingVertical: Layout.spacing.sm,
+    borderRadius: Layout.radius.sm,
+    marginBottom: Layout.spacing.sm,
+    gap: Layout.spacing.sm,
+  },
+  webLocationText: {
+    fontSize: Layout.fontSize.sm,
+    color: Colors.textSecondary,
   },
   addButton: {
     flexDirection: 'row',

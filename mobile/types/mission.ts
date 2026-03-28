@@ -41,6 +41,11 @@ export interface FieldPlanCreate {
   machineId: number;
   name: string;
   notes?: string;
+  returnToHome?: boolean;
+  homeLocation?: {
+    lat: number;
+    lon: number;
+  };
   workPoints: Omit<WorkPoint, 'id'>[];
 }
 
@@ -50,6 +55,7 @@ export interface FieldPlanSummary {
   machineId: number;
   name: string;
   notes: string | null;
+  returnToHome: boolean;
   workPointCount: number;  // Maps from backend point_count
   createdAt: string;
 }
@@ -116,12 +122,15 @@ export interface TelemetryLogEntry {
   gpsFixed?: boolean;
   lat?: number;
   lon?: number;
+  satellites?: number;
   speedKmh?: number;
+  headingDeg?: number;
   pixhawkTempC?: number;
   machineTempC?: number;
   implementDepthCm?: number;
   estopActive?: boolean;
   mode?: string;
+  headlightsOn?: boolean;
 }
 
 // Command log entry (for audit trail)

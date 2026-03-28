@@ -17,6 +17,11 @@ class FieldPlan(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Return to home configuration
+    return_to_home: Mapped[bool] = mapped_column(Boolean, default=True)
+    home_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    home_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now()
     )

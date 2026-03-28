@@ -26,9 +26,11 @@ class TelemetryLog(Base):
     gps_fixed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    satellites: Mapped[int | None] = mapped_column(nullable=True)
 
     # Motion
     speed_kmh: Mapped[float | None] = mapped_column(Float, nullable=True)
+    heading_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Temperatures
     pixhawk_temp_c: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -40,6 +42,9 @@ class TelemetryLog(Base):
     # State
     estop_active: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+    # Accessories
+    headlights_on: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     def __repr__(self) -> str:
         return f"<TelemetryLog {self.id} session={self.session_id}>"
