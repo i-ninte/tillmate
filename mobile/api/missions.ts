@@ -78,8 +78,7 @@ export const missionsApi = {
    */
   create: async (data: FieldPlanCreate): Promise<FieldPlan> => {
     // Transform to snake_case for backend
-    const payload = {
-      machine_id: data.machineId,
+    const payload: Record<string, unknown> = {
       name: data.name,
       notes: data.notes,
       return_to_home: data.returnToHome ?? true,
@@ -96,6 +95,10 @@ export const missionsApi = {
         label: wp.label,
       })),
     };
+    // Only include machine_id if provided
+    if (data.machineId) {
+      payload.machine_id = data.machineId;
+    }
     const response = await apiClient.post<BackendFieldPlan>('/missions', payload);
     return transformFieldPlan(response.data);
   },

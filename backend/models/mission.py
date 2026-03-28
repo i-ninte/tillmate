@@ -11,8 +11,8 @@ class FieldPlan(Base):
     __tablename__ = "field_plans"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    machine_id: Mapped[int] = mapped_column(
-        ForeignKey("machines.id", ondelete="CASCADE"), nullable=False
+    machine_id: Mapped[int | None] = mapped_column(
+        ForeignKey("machines.id", ondelete="SET NULL"), nullable=True
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)

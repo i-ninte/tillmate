@@ -32,7 +32,7 @@ class HomeLocation(BaseModel):
 class FieldPlanCreate(BaseModel):
     """Schema for creating a field plan."""
 
-    machine_id: int
+    machine_id: int | None = None
     name: str
     notes: str | None = None
     return_to_home: bool = True
@@ -44,7 +44,7 @@ class FieldPlanResponse(BaseModel):
     """Schema for field plan response."""
 
     id: int
-    machine_id: int
+    machine_id: int | None
     name: str
     notes: str | None
     return_to_home: bool
@@ -61,7 +61,7 @@ class FieldPlanSummary(BaseModel):
     """Schema for field plan summary (list view)."""
 
     id: int
-    machine_id: int
+    machine_id: int | None
     name: str
     notes: str | None
     return_to_home: bool

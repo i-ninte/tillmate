@@ -1,19 +1,91 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Image,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useConnectionStore } from '../store';
 import { Colors, Layout } from '../constants';
 import BigButton from '../components/common/BigButton';
+import { mavlinkService } from '../services/MavlinkService';
+import { machinesApi } from '../api/machines';
+
+/**
+ * Get or create a machine in the backend based on MAVLink system ID
+ */
+async function getOrCreateMachine(sysId: number, wifiSsid: string): Promise<number> {
+  const serialNumber = `TM-${sysId.toString().padStart(3, '0')}`;
+
+  try {
+    // Try to find existing machine
+    const machines = await machinesApi.list();
+    const existing = machines.find((m) => m.serialNumber === serialNumber);
+
+    if (existing) {
+      console.log('[Connection] Found existing machine:', existing.id);
+      return existing.id;
+    }
+
+    // Register new machine
+    const newMachine = await machinesApi.create({
+      serialNumber,
+      displayName: `TillMate ${sysId}`,
+      wifiSsid,
+    });
+    console.log('[Connection] Registered new machine:', newMachine.id);
+    return newMachine.id;
+  } catch (error) {
+    console.warn('[Connection] Could not register machine with backend:', error);
+    // Return sysId as fallback (works for local/offline use)
+    return sysId;
+  }
+}
 
 export default function ConnectionScreen() {
-  const { connected, connecting, setConnecting } = useConnectionStore();
+  const { connected, connecting, connectionError, targetIp, targetPort, setConnecting, setConnected, setConnectionError, setMachineId, setMachineSystemId } = useConnectionStore();
+  const isRegistering = useRef(false);
+
+  // Set up MavlinkService callbacks
+  useEffect(() => {
+    mavlinkService.onConnection(async (isConnected) => {
+      if (isConnected) {
+        // Get machine system ID from heartbeat
+        const sysId = mavlinkService.getMachineSystemId();
+        setMachineSystemId(sysId);
+
+        // Register with backend (avoid duplicate registrations)
+        if (!isRegistering.current) {
+          isRegistering.current = true;
+          try {
+            const machineId = await getOrCreateMachine(sysId, `TillMate_${sysId.toString().padStart(3, '0')}`);
+            setMachineId(machineId);
+          } finally {
+            isRegistering.current = false;
+          }
+        }
+
+        setConnected(true);
+      } else {
+        setMachineId(null);
+        setConnected(false);
+      }
+    });
+
+    mavlinkService.onErrorCallback((error) => {
+      console.error('[Connection] Error:', error);
+      setConnectionError(error.message);
+    });
+
+    // Clean up on unmount
+    return () => {
+      // Note: Service persists but callbacks could be cleared if needed
+    };
+  }, [setConnected, setConnectionError, setMachineId, setMachineSystemId]);
 
   // Navigate to tabs when connected
   useEffect(() => {
@@ -22,15 +94,29 @@ export default function ConnectionScreen() {
     }
   }, [connected]);
 
-  const handleConnect = async () => {
+  const handleConnect = useCallback(async () => {
     setConnecting(true);
+    setConnectionError(null);
 
-    // TODO: Implement actual MAVLink connection via MavlinkService
-    // For now, simulate connection after 2 seconds
-    setTimeout(() => {
-      useConnectionStore.getState().setConnected(true);
-    }, 2000);
-  };
+    // Set target IP and port
+    mavlinkService.setTarget(targetIp, targetPort);
+
+    // For web, simulate connection (no UDP support)
+    if (Platform.OS === 'web') {
+      setTimeout(() => {
+        setConnected(true);
+        setMachineId(1);
+      }, 1000);
+      return;
+    }
+
+    // Connect via MAVLink/UDP
+    const success = await mavlinkService.connect();
+
+    if (!success) {
+      setConnectionError('Could not connect to machine. Make sure you are on the machine\'s WiFi network.');
+    }
+  }, [targetIp, targetPort, setConnecting, setConnectionError, setConnected, setMachineId]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -59,6 +145,13 @@ export default function ConnectionScreen() {
           <View style={styles.statusContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
             <Text style={styles.statusText}>Connecting to machine...</Text>
+          </View>
+        )}
+
+        {/* Connection Error */}
+        {connectionError && !connecting && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{connectionError}</Text>
           </View>
         )}
 
@@ -122,6 +215,18 @@ const styles = StyleSheet.create({
     fontSize: Layout.fontSize.md,
     color: Colors.connecting,
     marginLeft: Layout.spacing.md,
+  },
+  errorContainer: {
+    backgroundColor: Colors.danger + '20',
+    padding: Layout.spacing.md,
+    borderRadius: Layout.radius.md,
+    marginBottom: Layout.spacing.lg,
+    maxWidth: 300,
+  },
+  errorText: {
+    fontSize: Layout.fontSize.sm,
+    color: Colors.danger,
+    textAlign: 'center',
   },
   buttonContainer: {
     width: '100%',

@@ -7,13 +7,15 @@ import {
   Alert,
   Platform,
   Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useMissionStore } from '../../store';
+import { useMissionStore, useConnectionStore } from '../../store';
 import { Colors, Layout } from '../../constants';
 import { FieldMap } from '../../components/mission';
 import BigButton from '../../components/common/BigButton';
+import { missionsApi } from '../../api/missions';
 
 // Only import WorkPointEditor on native (it uses BottomSheet which needs Reanimated)
 const WorkPointEditor = Platform.OS !== 'web'
@@ -31,8 +33,12 @@ export default function FieldPlannerScreen() {
     removeWorkPoint,
     setReturnToHome,
   } = useMissionStore();
+  const machineId = useConnectionStore((s) => s.machineId);
   const [isSending, setIsSending] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [planName, setPlanName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSendToMachine = async () => {
     if (workPoints.length === 0) {
@@ -55,20 +61,49 @@ export default function FieldPlannerScreen() {
       return;
     }
 
-    // TODO: Implement save to backend
-    Alert.alert(
-      'Save Field Plan',
-      'Enter a name for this plan:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Save',
-          onPress: () => {
-            Alert.alert('Success', 'Field plan saved!');
-          },
-        },
-      ]
-    );
+    // Show name modal
+    setPlanName(`Field Plan ${new Date().toLocaleDateString()}`);
+    setShowNameModal(true);
+  };
+
+  const handleConfirmSave = async () => {
+    if (!planName.trim()) {
+      Alert.alert('Name Required', 'Please enter a name for the field plan.');
+      return;
+    }
+
+    setShowNameModal(false);
+    setIsSaving(true);
+
+    try {
+      const homeLocation = workPoints.length > 0
+        ? { lat: workPoints[0].lat, lon: workPoints[0].lon }
+        : undefined;
+
+      await missionsApi.create({
+        machineId: machineId || 1, // Default machine if not connected
+        name: planName.trim(),
+        returnToHome: currentPlan?.returnToHome ?? true,
+        homeLocation,
+        workPoints: workPoints.map((wp, index) => ({
+          seq: index,
+          lat: wp.lat,
+          lon: wp.lon,
+          implementLowered: wp.implementLowered,
+          tillerOn: wp.tillerOn,
+          pumpOn: wp.pumpOn,
+          label: wp.label || `Point ${index + 1}`,
+        })),
+      });
+
+      clearCurrentPlan();
+      Alert.alert('Success', 'Field plan saved successfully!');
+    } catch (error) {
+      console.error('Error saving field plan:', error);
+      Alert.alert('Error', 'Failed to save field plan. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleClearPlan = () => {
@@ -186,12 +221,12 @@ export default function FieldPlannerScreen() {
           <TouchableOpacity
             onPress={handleSavePlan}
             style={styles.headerButton}
-            disabled={workPoints.length === 0}
+            disabled={workPoints.length === 0 || isSaving}
           >
             <Ionicons
-              name="save-outline"
+              name={isSaving ? 'hourglass-outline' : 'save-outline'}
               size={24}
-              color={workPoints.length > 0 ? Colors.primary : Colors.textDisabled}
+              color={workPoints.length > 0 && !isSaving ? Colors.primary : Colors.textDisabled}
             />
           </TouchableOpacity>
           <TouchableOpacity
@@ -287,6 +322,43 @@ export default function FieldPlannerScreen() {
           <WorkPointEditor onClose={handleEditorClose} />
         )
       )}
+
+      {/* Plan Name Modal */}
+      <Modal
+        visible={showNameModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNameModal(false)}
+      >
+        <View style={styles.nameModalOverlay}>
+          <View style={styles.nameModalContent}>
+            <Text style={styles.nameModalTitle}>Save Field Plan</Text>
+            <Text style={styles.nameModalSubtitle}>Enter a name for this plan</Text>
+            <TextInput
+              style={styles.nameInput}
+              value={planName}
+              onChangeText={setPlanName}
+              placeholder="Field Plan Name"
+              placeholderTextColor={Colors.textSecondary}
+              autoFocus
+            />
+            <View style={styles.nameModalButtons}>
+              <TouchableOpacity
+                style={styles.nameModalCancel}
+                onPress={() => setShowNameModal(false)}
+              >
+                <Text style={styles.nameModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.nameModalSave}
+                onPress={handleConfirmSave}
+              >
+                <Text style={styles.nameModalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -465,5 +537,69 @@ const styles = StyleSheet.create({
     fontSize: Layout.fontSize.md,
     color: Colors.danger,
     marginLeft: Layout.spacing.sm,
+  },
+  // Name modal styles
+  nameModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Layout.spacing.lg,
+  },
+  nameModalContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: Layout.radius.lg,
+    padding: Layout.spacing.xl,
+    width: '100%',
+    maxWidth: 400,
+  },
+  nameModalTitle: {
+    fontSize: Layout.fontSize.xl,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: Layout.spacing.xs,
+  },
+  nameModalSubtitle: {
+    fontSize: Layout.fontSize.sm,
+    color: Colors.textSecondary,
+    marginBottom: Layout.spacing.lg,
+  },
+  nameInput: {
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: Layout.radius.md,
+    padding: Layout.spacing.md,
+    fontSize: Layout.fontSize.md,
+    color: Colors.textPrimary,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: Layout.spacing.lg,
+  },
+  nameModalButtons: {
+    flexDirection: 'row',
+    gap: Layout.spacing.md,
+  },
+  nameModalCancel: {
+    flex: 1,
+    padding: Layout.spacing.md,
+    borderRadius: Layout.radius.md,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+  },
+  nameModalCancelText: {
+    fontSize: Layout.fontSize.md,
+    color: Colors.textSecondary,
+  },
+  nameModalSave: {
+    flex: 1,
+    padding: Layout.spacing.md,
+    borderRadius: Layout.radius.md,
+    backgroundColor: Colors.primary,
+    alignItems: 'center',
+  },
+  nameModalSaveText: {
+    fontSize: Layout.fontSize.md,
+    fontWeight: '600',
+    color: Colors.textPrimary,
   },
 });
