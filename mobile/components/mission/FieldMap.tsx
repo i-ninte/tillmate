@@ -75,6 +75,50 @@ export default function FieldMap({
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number } | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(true);
   const [mapRegion, setMapRegion] = useState<MapRegion>(initialRegion || DEFAULT_REGION);
+  const [isRetryingPermission, setIsRetryingPermission] = useState(false);
+
+  // Handler for retrying location permission - must be defined before conditional returns
+  const handleRetryPermission = useCallback(async () => {
+    setIsRetryingPermission(true);
+    try {
+      const result = await locationService.requestPermissions();
+      if (result.granted) {
+        setLocationPermission(true);
+        const position = await locationService.getCurrentPosition();
+        if (position) {
+          const userLocation = {
+            lat: position.coords.latitude,
+            lon: position.coords.longitude,
+          };
+          setCurrentLocation(userLocation);
+          setMapRegion({
+            latitude: userLocation.lat,
+            longitude: userLocation.lon,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          });
+        }
+      } else {
+        Alert.alert(
+          'Permission Denied',
+          Platform.OS === 'web'
+            ? 'Please allow location access in your browser settings and refresh the page.'
+            : 'Please enable location access in your device settings.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (e) {
+      console.error('Error requesting permissions:', e);
+    } finally {
+      setIsRetryingPermission(false);
+    }
+  }, []);
+
+  // Handler to continue without location - must be defined before conditional returns
+  const handleContinueWithoutLocation = useCallback(() => {
+    setLocationPermission(true);
+    setMapRegion(initialRegion || DEFAULT_REGION);
+  }, [initialRegion]);
 
   // Request location permissions and get current location (cross-platform)
   useEffect(() => {
@@ -443,22 +487,19 @@ export default function FieldMap({
           TillMate needs location access to show the map and let you plan field routes.
         </Text>
         <TouchableOpacity
-          style={styles.permissionButton}
-          onPress={async () => {
-            const result = await locationService.requestPermissions();
-            setLocationPermission(result.granted);
-            if (result.granted) {
-              const position = await locationService.getCurrentPosition();
-              if (position) {
-                setCurrentLocation({
-                  lat: position.coords.latitude,
-                  lon: position.coords.longitude,
-                });
-              }
-            }
-          }}
+          style={[styles.permissionButton, isRetryingPermission && styles.permissionButtonDisabled]}
+          onPress={handleRetryPermission}
+          disabled={isRetryingPermission}
         >
-          <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          <Text style={styles.permissionButtonText}>
+            {isRetryingPermission ? 'Requesting...' : 'Grant Permission'}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.skipButton}
+          onPress={handleContinueWithoutLocation}
+        >
+          <Text style={styles.skipButtonText}>Continue Without Location</Text>
         </TouchableOpacity>
       </View>
     );
@@ -605,10 +646,23 @@ const styles = StyleSheet.create({
     borderRadius: Layout.radius.md,
     marginTop: Layout.spacing.md,
   },
+  permissionButtonDisabled: {
+    opacity: 0.6,
+  },
   permissionButtonText: {
     fontSize: Layout.fontSize.md,
     fontWeight: '600',
     color: Colors.textPrimary,
+  },
+  skipButton: {
+    paddingHorizontal: Layout.spacing.xl,
+    paddingVertical: Layout.spacing.md,
+    marginTop: Layout.spacing.sm,
+  },
+  skipButtonText: {
+    fontSize: Layout.fontSize.sm,
+    color: Colors.textSecondary,
+    textDecorationLine: 'underline',
   },
   mapControls: {
     position: 'absolute',
