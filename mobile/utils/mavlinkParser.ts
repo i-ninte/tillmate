@@ -84,6 +84,9 @@ function getCrcExtra(msgId: number): number {
     case MavMsgId.MISSION_COUNT: return CRC_EXTRA.MISSION_COUNT;
     case MavMsgId.MISSION_ITEM_INT: return CRC_EXTRA.MISSION_ITEM_INT;
     case MavMsgId.MISSION_ACK: return CRC_EXTRA.MISSION_ACK;
+    case MavMsgId.MISSION_CLEAR_ALL: return CRC_EXTRA.MISSION_CLEAR_ALL;
+    case MavMsgId.MISSION_REQUEST_INT: return CRC_EXTRA.MISSION_REQUEST_INT;
+    case MavMsgId.MISSION_REQUEST: return 230;
     default: return 0;
   }
 }
@@ -313,6 +316,105 @@ export function encodeCommandLong(params: CommandLongParams, sysId: number = 255
   payload[32] = params.confirmation;
 
   return encodeMessage(MavMsgId.COMMAND_LONG, payload, sysId, compId);
+}
+
+/**
+ * Encode a MISSION_COUNT message
+ */
+export function encodeMissionCount(
+  count: number,
+  targetSystem: number,
+  targetComponent: number,
+  missionType: number = 0,
+  sysId: number = 255,
+  compId: number = 190
+): Uint8Array {
+  const payload = new Uint8Array(5);
+  const view = new DataView(payload.buffer);
+  view.setUint16(0, count, true);
+  payload[2] = targetSystem;
+  payload[3] = targetComponent;
+  payload[4] = missionType;
+  return encodeMessage(MavMsgId.MISSION_COUNT, payload, sysId, compId);
+}
+
+/**
+ * Encode a MISSION_CLEAR_ALL message
+ */
+export function encodeMissionClearAll(
+  targetSystem: number,
+  targetComponent: number,
+  missionType: number = 0,
+  sysId: number = 255,
+  compId: number = 190
+): Uint8Array {
+  const payload = new Uint8Array(3);
+  payload[0] = targetSystem;
+  payload[1] = targetComponent;
+  payload[2] = missionType;
+  return encodeMessage(MavMsgId.MISSION_CLEAR_ALL, payload, sysId, compId);
+}
+
+/**
+ * Encode a MISSION_ITEM_INT message
+ */
+export function encodeMissionItemInt(
+  item: {
+    seq: number;
+    frame: number;
+    command: number;
+    current: number;
+    autocontinue: number;
+    param1: number;
+    param2: number;
+    param3: number;
+    param4: number;
+    x: number;
+    y: number;
+    z: number;
+    missionType?: number;
+  },
+  targetSystem: number,
+  targetComponent: number,
+  sysId: number = 255,
+  compId: number = 190
+): Uint8Array {
+  const payload = new Uint8Array(38);
+  const view = new DataView(payload.buffer);
+  view.setFloat32(0, item.param1, true);
+  view.setFloat32(4, item.param2, true);
+  view.setFloat32(8, item.param3, true);
+  view.setFloat32(12, item.param4, true);
+  view.setInt32(16, item.x, true);
+  view.setInt32(20, item.y, true);
+  view.setFloat32(24, item.z, true);
+  view.setUint16(28, item.seq, true);
+  view.setUint16(30, item.command, true);
+  payload[32] = targetSystem;
+  payload[33] = targetComponent;
+  payload[34] = item.frame;
+  payload[35] = item.current;
+  payload[36] = item.autocontinue;
+  payload[37] = item.missionType ?? 0;
+  return encodeMessage(MavMsgId.MISSION_ITEM_INT, payload, sysId, compId);
+}
+
+/**
+ * Parse a MISSION_REQUEST_INT (or MISSION_REQUEST) payload — both start with seq uint16
+ */
+export function parseMissionRequest(payload: Uint8Array): { seq: number } | null {
+  // MAVLink 2 trims trailing zero bytes — short payload means seq bytes are 0
+  const b0 = payload.length > 0 ? payload[0] : 0;
+  const b1 = payload.length > 1 ? payload[1] : 0;
+  return { seq: b0 | (b1 << 8) };
+}
+
+/**
+ * Parse a MISSION_ACK payload
+ */
+export function parseMissionAck(payload: Uint8Array): { type: number } | null {
+  // MAVLink 2 trims trailing zero bytes — missing type byte means ACCEPTED (0)
+  return { type: payload.length > 2 ? payload[2] : 0 };
 }
 
 /**

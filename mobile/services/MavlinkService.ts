@@ -24,7 +24,13 @@ import {
   parseNamedValueInt,
   encodeHeartbeat,
   encodeCommandLong,
+  encodeMissionCount,
+  encodeMissionClearAll,
+  encodeMissionItemInt,
+  parseMissionRequest,
+  parseMissionAck,
 } from '../utils/mavlinkParser';
+import { MissionItemInt } from '../types';
 import { useConnectionStore } from '../store/connectionStore';
 import { useTelemetryStore } from '../store/telemetryStore';
 
@@ -55,6 +61,14 @@ class MavlinkService {
   // Machine info from heartbeat
   private machineSystemId: number = 1;
   private machineComponentId: number = 1;
+
+  // Waiters for specific incoming messages (mission protocol handshake)
+  private messageWaiters: {
+    msgId: MavMsgId;
+    predicate?: (msg: any) => boolean;
+    resolve: (msg: any) => void;
+    timer: NodeJS.Timeout;
+  }[] = [];
 
   /**
    * Set target IP and port
@@ -199,6 +213,13 @@ class MavlinkService {
     this.lastHeartbeatReceived = 0;
     this.receiveBuffer = new Uint8Array(0);
 
+    // Fail any pending mission-protocol waiters
+    for (const waiter of this.messageWaiters) {
+      clearTimeout(waiter.timer);
+      waiter.resolve(null);
+    }
+    this.messageWaiters = [];
+
     if (wasConnected) {
       this.onConnectionChange?.(false);
     }
@@ -324,6 +345,18 @@ class MavlinkService {
       case MavMsgId.NAMED_VALUE_INT:
         this.handleNamedValueInt(msg);
         break;
+      case MavMsgId.MISSION_REQUEST_INT:
+      case MavMsgId.MISSION_REQUEST: {
+        // Some autopilots request items via MISSION_REQUEST — treat both alike
+        const req = parseMissionRequest(msg.payload);
+        if (req) this.resolveWaiters(MavMsgId.MISSION_REQUEST_INT, req);
+        break;
+      }
+      case MavMsgId.MISSION_ACK: {
+        const ack = parseMissionAck(msg.payload);
+        if (ack) this.resolveWaiters(MavMsgId.MISSION_ACK, ack);
+        break;
+      }
       default:
         // Ignore unknown messages
         break;
@@ -474,6 +507,66 @@ class MavlinkService {
 
     const encoded = encodeCommandLong(updatedParams);
     this.sendRaw(encoded);
+  }
+
+  /**
+   * Resolve any pending waiters for a message ID
+   */
+  private resolveWaiters(msgId: MavMsgId, message: any): void {
+    const remaining: typeof this.messageWaiters = [];
+    for (const waiter of this.messageWaiters) {
+      if (waiter.msgId === msgId && (!waiter.predicate || waiter.predicate(message))) {
+        clearTimeout(waiter.timer);
+        waiter.resolve(message);
+      } else {
+        remaining.push(waiter);
+      }
+    }
+    this.messageWaiters = remaining;
+  }
+
+  /**
+   * Wait for a specific incoming message (MavlinkReceiver interface).
+   * Resolves with the parsed message, or null on timeout.
+   */
+  waitForMessage(
+    msgId: MavMsgId,
+    timeoutMs: number,
+    predicate?: (msg: any) => boolean
+  ): Promise<any | null> {
+    return new Promise((resolve) => {
+      const waiter = {
+        msgId,
+        predicate,
+        resolve,
+        timer: setTimeout(() => {
+          this.messageWaiters = this.messageWaiters.filter((w) => w !== waiter);
+          resolve(null);
+        }, timeoutMs),
+      };
+      this.messageWaiters.push(waiter);
+    });
+  }
+
+  /**
+   * MavlinkSender interface — mission protocol messages
+   */
+  async sendMissionClearAll(): Promise<void> {
+    this.sendRaw(
+      encodeMissionClearAll(this.machineSystemId, this.machineComponentId)
+    );
+  }
+
+  async sendMissionCount(count: number, missionType: number = 0): Promise<void> {
+    this.sendRaw(
+      encodeMissionCount(count, this.machineSystemId, this.machineComponentId, missionType)
+    );
+  }
+
+  async sendMissionItemInt(item: MissionItemInt): Promise<void> {
+    this.sendRaw(
+      encodeMissionItemInt(item, this.machineSystemId, this.machineComponentId)
+    );
   }
 
   /**
