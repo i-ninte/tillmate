@@ -19,12 +19,14 @@ import { locationService } from '../../utils/locationService';
 let MapView: any = null;
 let Marker: any = null;
 let Polyline: any = null;
+let Polygon: any = null;
 
 if (Platform.OS !== 'web') {
   const Maps = require('react-native-maps');
   MapView = Maps.default;
   Marker = Maps.Marker;
   Polyline = Maps.Polyline;
+  Polygon = Maps.Polygon;
 }
 
 // Import WorkPointMarker only on native
@@ -37,6 +39,8 @@ interface FieldMapProps {
   onPointAdded?: (point: WorkPoint) => void;
   editable?: boolean;
   showPath?: boolean;
+  // 'points': taps add work points. 'boundary': taps add field boundary corners.
+  mode?: 'points' | 'boundary';
   initialRegion?: MapRegion;
   showCurrentLocation?: boolean;
   machineLocation?: { lat: number; lon: number } | null;
@@ -56,6 +60,7 @@ export default function FieldMap({
   onPointAdded,
   editable = true,
   showPath = true,
+  mode = 'points',
   initialRegion,
   showCurrentLocation = true,
   machineLocation,
@@ -69,7 +74,11 @@ export default function FieldMap({
     selectWorkPoint,
     removeWorkPoint,
     updateWorkPoint,
+    currentPlan,
+    setBoundary,
   } = useMissionStore();
+
+  const boundary = currentPlan?.boundary ?? [];
 
   const [locationPermission, setLocationPermission] = useState<boolean | null>(null);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lon: number } | null>(null);
@@ -163,12 +172,17 @@ export default function FieldMap({
     getLocation();
   }, []);
 
-  // Handle map press to add new work point
+  // Handle map press to add new work point (or boundary corner)
   const handleMapPress = useCallback(
     (event: any) => {
       if (!editable) return;
 
       const { latitude, longitude } = event.nativeEvent.coordinate;
+
+      if (mode === 'boundary') {
+        setBoundary([...boundary, { lat: latitude, lon: longitude }]);
+        return;
+      }
 
       // Create new work point
       const newPoint: WorkPoint = {
@@ -206,7 +220,7 @@ export default function FieldMap({
         );
       }
     },
-    [editable, workPoints.length, addWorkPoint, onPointAdded, selectWorkPoint, onPointSelect]
+    [editable, mode, boundary, setBoundary, workPoints.length, addWorkPoint, onPointAdded, selectWorkPoint, onPointSelect]
   );
 
   // Handle marker press
@@ -333,11 +347,40 @@ export default function FieldMap({
       removeWorkPoint(pointId);
     };
 
+    const handleAddCorner = () => {
+      const baseLat = currentLocation?.lat || 37.7749;
+      const baseLon = currentLocation?.lon || -122.4194;
+      setBoundary([
+        ...boundary,
+        {
+          lat: baseLat + (Math.random() - 0.5) * 0.001,
+          lon: baseLon + (Math.random() - 0.5) * 0.001,
+        },
+      ]);
+    };
+
     return (
       <View style={styles.webContainer}>
         <View style={styles.webHeader}>
           <Text style={styles.webTitle}>Field Plan</Text>
-          {editable && (
+          {editable && mode === 'boundary' && (
+            <View style={styles.webHeaderButtons}>
+              <TouchableOpacity style={styles.addButton} onPress={handleAddCorner}>
+                <Ionicons name="add-circle" size={20} color={Colors.warning} />
+                <Text style={styles.addButtonText}>Add Corner ({boundary.length})</Text>
+              </TouchableOpacity>
+              {boundary.length > 0 && (
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => setBoundary(boundary.slice(0, -1))}
+                >
+                  <Ionicons name="arrow-undo" size={20} color={Colors.textSecondary} />
+                  <Text style={styles.addButtonText}>Undo</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+          {editable && mode === 'points' && (
             <View style={styles.webHeaderButtons}>
               {currentLocation && (
                 <TouchableOpacity style={styles.addButton} onPress={() => handleAddPoint(true)}>
@@ -522,6 +565,35 @@ export default function FieldMap({
         loadingIndicatorColor={Colors.primary}
         loadingBackgroundColor={Colors.background}
       >
+        {/* Field boundary polygon */}
+        {boundary.length >= 3 && (
+          <Polygon
+            coordinates={boundary.map((b) => ({ latitude: b.lat, longitude: b.lon }))}
+            strokeColor={Colors.warning}
+            strokeWidth={2}
+            fillColor="rgba(74, 124, 35, 0.15)"
+          />
+        )}
+        {boundary.length > 0 && boundary.length < 3 && (
+          <Polyline
+            coordinates={boundary.map((b) => ({ latitude: b.lat, longitude: b.lon }))}
+            strokeColor={Colors.warning}
+            strokeWidth={2}
+          />
+        )}
+        {mode === 'boundary' &&
+          boundary.map((b, i) => (
+            <Marker
+              key={`corner-${i}`}
+              coordinate={{ latitude: b.lat, longitude: b.lon }}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              <View style={styles.cornerMarker}>
+                <Text style={styles.cornerMarkerText}>{i + 1}</Text>
+              </View>
+            </Marker>
+          ))}
+
         {/* Path polyline */}
         {showPath && pathCoordinates.length > 1 && (
           <Polyline
@@ -584,10 +656,28 @@ export default function FieldMap({
       </View>
 
       {/* Instructions overlay */}
-      {editable && workPoints.length === 0 && (
+      {editable && mode === 'boundary' && boundary.length < 3 && (
+        <View style={styles.instructionOverlay}>
+          <Text style={styles.instructionText}>
+            Tap the corners of your field ({boundary.length}/3 minimum)
+          </Text>
+        </View>
+      )}
+      {editable && mode === 'points' && workPoints.length === 0 && boundary.length === 0 && (
         <View style={styles.instructionOverlay}>
           <Text style={styles.instructionText}>Tap on the map to add work points</Text>
         </View>
+      )}
+
+      {/* Boundary controls */}
+      {mode === 'boundary' && boundary.length > 0 && (
+        <TouchableOpacity
+          style={styles.undoCornerButton}
+          onPress={() => setBoundary(boundary.slice(0, -1))}
+        >
+          <Ionicons name="arrow-undo" size={18} color={Colors.textPrimary} />
+          <Text style={styles.undoCornerText}>Undo corner</Text>
+        </TouchableOpacity>
       )}
 
       {/* Point count badge */}
@@ -713,6 +803,37 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: Layout.fontSize.sm,
     fontWeight: '600',
+  },
+  cornerMarker: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.warning,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  cornerMarkerText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#000',
+  },
+  undoCornerButton: {
+    position: 'absolute',
+    bottom: Layout.spacing.sm,
+    left: Layout.spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: Layout.spacing.md,
+    paddingVertical: Layout.spacing.sm,
+    borderRadius: Layout.radius.md,
+    gap: Layout.spacing.xs,
+  },
+  undoCornerText: {
+    color: Colors.textPrimary,
+    fontSize: Layout.fontSize.sm,
   },
   machineMarker: {
     width: 48,

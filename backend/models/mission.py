@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List
-from sqlalchemy import String, Float, Boolean, DateTime, ForeignKey, Text, func
+from sqlalchemy import String, Float, Boolean, DateTime, ForeignKey, Text, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
@@ -16,6 +16,13 @@ class FieldPlan(Base):
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Field operation configuration
+    operation: Mapped[str | None] = mapped_column(String(16), nullable=True)  # tilling | weeding | spraying
+    depth_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
+    implement_width_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Field boundary polygon: [{"lat": .., "lon": ..}, ...]
+    boundary: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     # Return to home configuration
     return_to_home: Mapped[bool] = mapped_column(Boolean, default=True)

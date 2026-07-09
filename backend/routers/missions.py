@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from schemas import FieldPlanCreate, FieldPlanResponse, FieldPlanSummary
-from services import MissionService
+from services import MissionService, MachineService
 
 router = APIRouter()
 
@@ -13,6 +13,10 @@ async def create_mission(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new field plan."""
+    if payload.machine_id is not None:
+        machine = await MachineService(db).get(payload.machine_id)
+        if machine is None:
+            raise HTTPException(status_code=404, detail="Machine not found")
     service = MissionService(db)
     return await service.create(payload)
 

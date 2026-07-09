@@ -47,7 +47,10 @@
 | MavlinkService | NOT_STARTED | `/mobile/services/MavlinkService.ts` | UDP socket singleton |
 | MavlinkParser | NOT_STARTED | `/mobile/services/MavlinkParser.ts` | Bytes → messages |
 | MavlinkSender | NOT_STARTED | `/mobile/services/MavlinkSender.ts` | Messages → bytes |
-| missionCompiler | COMPLETE | `/mobile/services/missionCompiler.ts` | FieldPlan → MissionItems |
+| missionCompiler | COMPLETE | `/mobile/services/missionCompiler.ts` | FieldPlan → MissionItems (depth-aware servo PWM) |
+| coveragePlanner | COMPLETE | `/mobile/services/coveragePlanner.ts` | Boundary polygon + implement width → serpentine coverage path |
+| operations | COMPLETE | `/mobile/services/operations.ts` | Operation configs (tilling/weeding/spraying), depth→PWM, apply op to points |
+| simulation | COMPLETE | `/mobile/services/simulation.ts` | Pure path-following math for route preview |
 | missionUploader | COMPLETE | `/mobile/services/missionUploader.ts` | Upload handshake |
 | telemetryLogger | NOT_STARTED | `/mobile/services/telemetryLogger.ts` | Batch log to backend |
 
@@ -71,6 +74,7 @@
 | FieldMap | COMPLETE | `/mobile/components/mission/FieldMap.tsx` |
 | WorkPointEditor | COMPLETE | `/mobile/components/mission/WorkPointEditor.tsx` |
 | WorkPointMarker | COMPLETE | `/mobile/components/mission/WorkPointMarker.tsx` |
+| OperationPanel | COMPLETE | `/mobile/components/mission/OperationPanel.tsx` |
 
 ### Common Components
 | Component | Status | Location |
@@ -103,6 +107,7 @@
 ### Hooks
 | Hook | Status | Location |
 |------|--------|----------|
+| useSimulation | COMPLETE | `/mobile/hooks/useSimulation.ts` |
 | useMavlinkService | NOT_STARTED | `/mobile/hooks/useMavlinkService.ts` |
 | useInterval | NOT_STARTED | `/mobile/hooks/useInterval.ts` |
 | useTelemetryThrottle | NOT_STARTED | `/mobile/hooks/useTelemetryThrottle.ts` |
@@ -194,6 +199,15 @@
 | 2026-03-28 | Updated API client for returnToHome, satellites, headlights | api/missions.ts |
 | 2026-03-28 | Updated types for backend integration | types/mission.ts |
 | 2026-03-28 | Added web location status display | components/mission/FieldMap.tsx |
+| 2026-07-09 | Added jest test runner (jest 29 + ts-jest) | package.json |
+| 2026-07-09 | QGC-style coverage planner (polygon → serpentine path) | services/coveragePlanner.ts, __tests__/coveragePlanner.test.ts |
+| 2026-07-09 | Operation types (tilling/weeding/spraying) + depth→PWM | services/operations.ts, types/mission.ts, services/missionCompiler.ts, __tests__/operations.test.ts |
+| 2026-07-09 | missionStore: setOperation/setDepthCm/setImplementWidth/setBoundary/generatePath | store/missionStore.ts |
+| 2026-07-09 | FieldMap boundary-drawing mode (polygon, corner markers, undo) | components/mission/FieldMap.tsx |
+| 2026-07-09 | OperationPanel (operation picker + depth/width steppers) | components/mission/OperationPanel.tsx |
+| 2026-07-09 | Route simulation preview (play/stop, animated marker) | services/simulation.ts, hooks/useSimulation.ts, app/(tabs)/field-planner.tsx |
+| 2026-07-09 | Field planner: Draw Field / Route Points modes + Generate Route | app/(tabs)/field-planner.tsx |
+| 2026-07-09 | API round-trips operation/depth/width/boundary | api/missions.ts |
 
 ---
 

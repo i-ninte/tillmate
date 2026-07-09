@@ -31,6 +31,10 @@ interface BackendFieldPlan {
   return_to_home: boolean;
   home_lat: number | null;
   home_lon: number | null;
+  operation: 'tilling' | 'weeding' | 'spraying' | null;
+  depth_cm: number | null;
+  implement_width_m: number | null;
+  boundary: { lat: number; lon: number }[] | null;
   created_at: string;
   updated_at: string;
   work_points: BackendWorkPoint[];
@@ -57,6 +61,10 @@ const transformFieldPlan = (plan: BackendFieldPlan): FieldPlan => ({
   homeLocation: plan.home_lat !== null && plan.home_lon !== null
     ? { lat: plan.home_lat, lon: plan.home_lon }
     : undefined,
+  operation: plan.operation ?? undefined,
+  depthCm: plan.depth_cm ?? undefined,
+  implementWidthM: plan.implement_width_m ?? undefined,
+  boundary: plan.boundary ?? undefined,
   createdAt: plan.created_at,
   updatedAt: plan.updated_at,
   workPoints: plan.work_points.map(transformWorkPoint),
@@ -84,6 +92,12 @@ export const missionsApi = {
       return_to_home: data.returnToHome ?? true,
       home_location: data.homeLocation
         ? { lat: data.homeLocation.lat, lon: data.homeLocation.lon }
+        : null,
+      operation: data.operation ?? null,
+      depth_cm: data.depthCm ?? null,
+      implement_width_m: data.implementWidthM ?? null,
+      boundary: data.boundary
+        ? data.boundary.map((b) => ({ lat: b.lat, lon: b.lon }))
         : null,
       work_points: data.workPoints.map(wp => ({
         seq: wp.seq,

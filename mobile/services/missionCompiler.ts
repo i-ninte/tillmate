@@ -17,6 +17,21 @@ import {
   RELAY_STATE,
   WAYPOINT_ACCEPTANCE_RADIUS,
 } from '../utils/mavlinkConstants';
+import { depthCmToPwm, OPERATIONS } from './operations';
+
+/**
+ * Resolves the PWM used when the implement is lowered.
+ * Uses the plan's operation depth when set, otherwise the fixed default.
+ */
+function loweredPwmForPlan(plan: FieldPlan): number {
+  if (plan.depthCm !== undefined && plan.depthCm > 0) {
+    const maxDepth = plan.operation
+      ? OPERATIONS[plan.operation].maxDepthCm
+      : 30;
+    return depthCmToPwm(plan.depthCm, maxDepth || 30);
+  }
+  return IMPLEMENT_PWM.LOWERED;
+}
 
 /**
  * Creates a base mission item with common fields
@@ -117,6 +132,7 @@ export function compileMission(plan: FieldPlan): MissionItemInt[] {
   }
 
   let seq = 0;
+  const loweredPwm = loweredPwmForPlan(plan);
 
   // First item must be a waypoint (MAVLink requirement)
   // Use the first work point as the home/start location
@@ -129,7 +145,7 @@ export function compileMission(plan: FieldPlan): MissionItemInt[] {
   for (const workPoint of plan.workPoints) {
     // 1. Set implement position BEFORE arriving at waypoint
     if (workPoint.implementLowered) {
-      items.push(createServoItem(seq++, IMPLEMENT_PWM.LOWERED));
+      items.push(createServoItem(seq++, loweredPwm));
     } else {
       items.push(createServoItem(seq++, IMPLEMENT_PWM.RAISED));
     }
@@ -174,6 +190,7 @@ export function compileMissionCompact(plan: FieldPlan): MissionItemInt[] {
   }
 
   let seq = 0;
+  const loweredPwm = loweredPwmForPlan(plan);
 
   // First item must be a waypoint (MAVLink requirement)
   const firstPoint = plan.workPoints[0];
@@ -186,7 +203,7 @@ export function compileMissionCompact(plan: FieldPlan): MissionItemInt[] {
     // Set implement position
     items.push(createServoItem(
       seq++,
-      workPoint.implementLowered ? IMPLEMENT_PWM.LOWERED : IMPLEMENT_PWM.RAISED
+      workPoint.implementLowered ? loweredPwm : IMPLEMENT_PWM.RAISED
     ));
 
     // Set tiller state

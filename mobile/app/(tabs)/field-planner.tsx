@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMissionStore, useConnectionStore } from '../../store';
 import { Colors, Layout } from '../../constants';
 import { FieldMap } from '../../components/mission';
+import OperationPanel from '../../components/mission/OperationPanel';
 import BigButton from '../../components/common/BigButton';
 import { missionsApi } from '../../api/missions';
+import { useSimulation } from '../../hooks/useSimulation';
 
 // Only import WorkPointEditor on native (it uses BottomSheet which needs Reanimated)
 const WorkPointEditor = Platform.OS !== 'web'
@@ -32,6 +34,11 @@ export default function FieldPlannerScreen() {
     updateWorkPoint,
     removeWorkPoint,
     setReturnToHome,
+    createNewPlan,
+    setOperation,
+    setDepthCm,
+    setImplementWidth,
+    generatePath,
   } = useMissionStore();
   const machineId = useConnectionStore((s) => s.machineId);
   const [isSending, setIsSending] = useState(false);
@@ -39,6 +46,30 @@ export default function FieldPlannerScreen() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [planName, setPlanName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [mapMode, setMapMode] = useState<'boundary' | 'points'>('boundary');
+
+  // Make sure a plan exists so boundary/operation edits have somewhere to go
+  useEffect(() => {
+    if (!currentPlan) {
+      createNewPlan(machineId || 1, 'New Field Plan');
+    }
+  }, [currentPlan, createNewPlan, machineId]);
+
+  // Simulation: preview the machine driving the planned path
+  const simPath = useMemo(
+    () => workPoints.map((p) => ({ lat: p.lat, lon: p.lon })),
+    [workPoints]
+  );
+  const simulation = useSimulation(simPath);
+
+  const handleGeneratePath = () => {
+    const result = generatePath();
+    if (!result.ok) {
+      Alert.alert('Cannot Generate Route', result.error);
+      return;
+    }
+    setMapMode('points');
+  };
 
   const handleSendToMachine = async () => {
     if (workPoints.length === 0) {
@@ -85,6 +116,10 @@ export default function FieldPlannerScreen() {
         name: planName.trim(),
         returnToHome: currentPlan?.returnToHome ?? true,
         homeLocation,
+        operation: currentPlan?.operation,
+        depthCm: currentPlan?.depthCm,
+        implementWidthM: currentPlan?.implementWidthM,
+        boundary: currentPlan?.boundary,
         workPoints: workPoints.map((wp, index) => ({
           seq: index,
           lat: wp.lat,
@@ -243,12 +278,49 @@ export default function FieldPlannerScreen() {
         </View>
       </View>
 
+      {/* Mode Toggle */}
+      <View style={styles.modeToggle}>
+        <TouchableOpacity
+          style={[styles.modeButton, mapMode === 'boundary' && styles.modeButtonActive]}
+          onPress={() => setMapMode('boundary')}
+        >
+          <Ionicons
+            name="crop-outline"
+            size={18}
+            color={mapMode === 'boundary' ? Colors.textPrimary : Colors.textSecondary}
+          />
+          <Text style={[styles.modeButtonText, mapMode === 'boundary' && styles.modeButtonTextActive]}>
+            Draw Field
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.modeButton, mapMode === 'points' && styles.modeButtonActive]}
+          onPress={() => setMapMode('points')}
+        >
+          <Ionicons
+            name="location-outline"
+            size={18}
+            color={mapMode === 'points' ? Colors.textPrimary : Colors.textSecondary}
+          />
+          <Text style={[styles.modeButtonText, mapMode === 'points' && styles.modeButtonTextActive]}>
+            Route Points
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Map Area */}
       <View style={styles.mapContainer}>
         <FieldMap
-          editable={true}
+          editable={!simulation.running}
           showPath={true}
+          mode={mapMode}
           onPointSelect={handlePointSelect}
+          machineLocation={
+            simulation.position
+              ? { lat: simulation.position.lat, lon: simulation.position.lon }
+              : undefined
+          }
+          machineHeading={simulation.position?.headingDeg ?? null}
           initialRegion={{
             latitude: 37.7749,
             longitude: -122.4194,
@@ -258,20 +330,42 @@ export default function FieldPlannerScreen() {
         />
       </View>
 
-      {/* Instructions */}
-      <View style={styles.instructions}>
-        <View style={styles.instructionRow}>
-          <Ionicons name="finger-print" size={20} color={Colors.primary} />
-          <Text style={styles.instructionText}>
-            {Platform.OS === 'web' ? 'Click "Add Point" to add waypoints' : 'Tap map to add points'}
+      {/* Operation selection */}
+      <OperationPanel
+        operation={currentPlan?.operation}
+        depthCm={currentPlan?.depthCm}
+        implementWidthM={currentPlan?.implementWidthM}
+        onOperationChange={setOperation}
+        onDepthChange={setDepthCm}
+        onWidthChange={setImplementWidth}
+      />
+
+      {/* Generate + Simulate row */}
+      <View style={styles.generateRow}>
+        <TouchableOpacity style={styles.generateButton} onPress={handleGeneratePath}>
+          <Ionicons name="git-network-outline" size={20} color={Colors.textPrimary} />
+          <Text style={styles.generateButtonText}>Generate Route</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.simulateButton,
+            workPoints.length < 2 && styles.simulateButtonDisabled,
+            simulation.running && styles.simulateButtonRunning,
+          ]}
+          disabled={workPoints.length < 2}
+          onPress={simulation.running ? simulation.stop : simulation.start}
+        >
+          <Ionicons
+            name={simulation.running ? 'stop' : 'play'}
+            size={20}
+            color={Colors.textPrimary}
+          />
+          <Text style={styles.generateButtonText}>
+            {simulation.running
+              ? `Stop (${Math.round((simulation.position?.progress ?? 0) * 100)}%)`
+              : 'Simulate'}
           </Text>
-        </View>
-        <View style={styles.instructionRow}>
-          <Ionicons name="create-outline" size={20} color={Colors.primary} />
-          <Text style={styles.instructionText}>
-            {Platform.OS === 'web' ? 'Click point to edit' : 'Tap point to edit actions'}
-          </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* Return to Home Toggle */}
@@ -395,22 +489,71 @@ const styles = StyleSheet.create({
     flex: 1,
     margin: Layout.spacing.sm,
   },
-  instructions: {
+  modeToggle: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: Layout.spacing.xl,
-    paddingVertical: Layout.spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    marginHorizontal: Layout.spacing.md,
+    marginTop: Layout.spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: Layout.radius.md,
+    padding: 4,
+    gap: 4,
   },
-  instructionRow: {
+  modeButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Layout.spacing.sm,
+    borderRadius: Layout.radius.sm,
     gap: Layout.spacing.xs,
   },
-  instructionText: {
+  modeButtonActive: {
+    backgroundColor: Colors.primary,
+  },
+  modeButtonText: {
     fontSize: Layout.fontSize.sm,
     color: Colors.textSecondary,
+  },
+  modeButtonTextActive: {
+    color: Colors.textPrimary,
+    fontWeight: '600',
+  },
+  generateRow: {
+    flexDirection: 'row',
+    marginHorizontal: Layout.spacing.md,
+    marginBottom: Layout.spacing.sm,
+    gap: Layout.spacing.sm,
+  },
+  generateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.earth,
+    borderRadius: Layout.radius.md,
+    paddingVertical: Layout.spacing.md,
+    gap: Layout.spacing.xs,
+  },
+  simulateButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+    borderRadius: Layout.radius.md,
+    paddingVertical: Layout.spacing.md,
+    gap: Layout.spacing.xs,
+  },
+  simulateButtonDisabled: {
+    opacity: 0.4,
+  },
+  simulateButtonRunning: {
+    backgroundColor: Colors.danger,
+  },
+  generateButtonText: {
+    fontSize: Layout.fontSize.md,
+    fontWeight: '600',
+    color: Colors.textPrimary,
   },
   actions: {
     paddingHorizontal: Layout.spacing.lg,
