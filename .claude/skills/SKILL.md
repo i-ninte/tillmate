@@ -52,9 +52,9 @@ If the answer is no, redesign it. No raw MAVLink IDs, no technical jargon, no hi
 
 | Layer | Choice | Reason |
 |---|---|---|
-| Mobile | React Native (Expo) + TypeScript | Cross-platform Android/iOS, large ecosystem, Expo simplifies build |
-| Map | react-native-maps | Native maps with polyline/polygon drawing |
-| MAVLink | Custom UDP socket via `react-native-udp` | Direct MAVLink 2 parsing in JS/TS |
+| Mobile | React Native (Expo SDK 55+) + TypeScript | Cross-platform Android/iOS/Web, large ecosystem, Expo simplifies build |
+| Map | MapLibre (`@maplibre/maplibre-react-native` on native, `react-map-gl/maplibre` on web) with ESRI satellite tiles | Real satellite base map on every platform, no Google Maps API key. Tile URL swap in `constants/mapStyle.ts` lets us point at Atlas or MapTiler later. |
+| MAVLink | Custom UDP socket via `react-native-udp` | Direct MAVLink 2 parsing/encoding in JS/TS (`utils/mavlinkParser.ts`) |
 | Backend | FastAPI (Python 3.11+) | Async, fast, auto-generates OpenAPI docs |
 | DB | MySQL 8 + SQLAlchemy 2 (async) + Alembic | Relational, migrations tracked |
 | State | Zustand | Lightweight, no boilerplate |
@@ -111,16 +111,21 @@ See `references/01-architecture.md` for full details.
 
 ## Development Order (follow this sequence)
 
-1. Set up Expo project + project structure (`09-react-native-structure.md`)
-2. Set up FastAPI project + DB + Alembic migrations (`07-fastapi-backend.md`, `08-database-schema.md`)
-3. Implement MAVLink UDP socket layer — connect to DroneBridge (`02-mavlink-commands.md`, `03-dronebridge-setup.md`)
-4. Build Connection Screen — machine discovery + status (`09-react-native-structure.md`)
-5. Build Telemetry Dashboard (`04-telemetry-dashboard.md`)
-6. Build Real-Time Control Panel — tiller, pump, depth, E-stop (`06-realtime-controls.md`)
-7. Build Field Planner / Mission Planning (`05-mission-planning.md`)
-8. Integrate backend persistence (missions, logs) (`07-fastapi-backend.md`)
-9. Farmer usability pass — apply UI rules throughout (`10-ui-design-rules.md`)
-10. Testing (`11-testing-guide.md`)
+**Current status:** all software steps below are ✅ implemented, tested (131 mobile + 25 backend jest/pytest tests passing, plus 7 live-backend integration tests). Only step 10's hardware-in-the-loop bench test is still outstanding — see `TASKS.md`.
+
+1. ✅ Set up Expo project + project structure (`09-react-native-structure.md`)
+2. ✅ Set up FastAPI project + DB + Alembic migrations (`07-fastapi-backend.md`, `08-database-schema.md`)
+3. ✅ Implement MAVLink UDP socket layer — connect to DroneBridge (`02-mavlink-commands.md`, `03-dronebridge-setup.md`)
+4. ✅ Build Connection Screen — machine discovery + status (`09-react-native-structure.md`)
+5. ✅ Build Telemetry Dashboard (`04-telemetry-dashboard.md`)
+6. ✅ Build Real-Time Control Panel — tiller, pump, depth, E-stop (`06-realtime-controls.md`)
+7. ✅ Build Field Planner / Mission Planning — with boundary drawing, operation picker (tilling/weeding/spraying), coverage-path generation, in-app simulation, upload + verify (`05-mission-planning.md`)
+8. ✅ Build Mission Run Controls — Start Working (arm + AUTO + MISSION_START) / Pause (HOLD) / Resume / Return to Start (RTL), guarded by GPS fix + E-stop
+9. ✅ Execution monitoring — parse `MISSION_CURRENT` + `MISSION_ITEM_REACHED`, show "Working point X of N" + breadcrumb trail on Field View
+10. ✅ Integrate backend persistence (machines, missions with operation/depth/boundary, telemetry logs, command audit) with snake_case ↔ camelCase transforms and live integration tests (`07-fastapi-backend.md`)
+11. ✅ Farmer usability pass — E-stop on every operational screen, telemetry `--` on disconnect, GPS-gated mission start, farmer vocabulary throughout (`10-ui-design-rules.md`)
+12. ✅ Testing (jest + pytest + live integration; `11-testing-guide.md`)
+13. ⏳ **Hardware bench test** — needs physical Pixhawk + DroneBridge ESP32 rig (`11-testing-guide.md`)
 
 ---
 
@@ -130,8 +135,16 @@ See `references/01-architecture.md` for full details.
 |---|---|
 | Mission / Plan | Field Plan |
 | Waypoint | Work Point |
-| Vehicle / UAV | Machine |
-| Arm / Disarm | Start Engine / Stop Engine |
+| Field boundary polygon | Draw Field |
+| Coverage path / boustrophedon | Route / Generate Route |
+| Implement width | Implement Width |
+| Working depth / servo PWM | Working Depth |
+| Operation (tilling/weeding/spraying) | Operation |
+| Vehicle / UAV / UGV | Machine |
+| Arm / Disarm | Start Working / (part of Emergency Stop) |
+| MISSION_START | Start Working |
+| HOLD mode | Pause |
+| AUTO mode | Resume / Working |
 | RTL | Return to Start |
 | Altitude | Height |
 | Implement (generic) | Tool / Implement |
@@ -144,8 +157,9 @@ See `references/01-architecture.md` for full details.
 ## Critical Safety Rules (enforce in every PR)
 
 - Emergency Stop button MUST be visible on every operational screen. Never hide it behind a menu.
-- If MAVLink connection is lost, all telemetry tiles must show `--` immediately. Never display stale values.
-- Mission Start must be disabled when GPS fix is absent or E-stop is active.
+- If MAVLink connection is lost, all telemetry tiles must show `--` immediately. Never display stale values. (`telemetryStore.clearAll()` is called on disconnect from `useMavlinkService`.)
+- Mission Start / Start Working must be disabled when GPS fix is absent, when E-stop is active, or when no plan has been sent. (`MissionRunControls.tsx` enforces this.)
+- Every mission upload MUST be verified by reading it back from the Pixhawk and comparing item-by-item (`downloadMission` + `verifyMissionMatches`). Never trust the ACK alone.
 - No screen may display raw MAVLink message IDs or parameter names to the user.
 - The depth slider sends its command ONLY on release (not on drag) to avoid rapid actuator commands.
 
@@ -206,6 +220,7 @@ To avoid rescanning the entire codebase on every task, this project uses **conte
 
 ---
 
-## Development Plan
+## Development Plan & System Flow
 
-See `plan.md` in the project root for the full development roadmap with phased tasks and checklists.
+- `TASKS.md` in the repo root — implementation roadmap and status (everything in it is checked off except the hardware bench test).
+- `docs/SYSTEM_FLOW.md` in the repo root — end-to-end walkthrough of every runtime flow (connection, planning, upload, run, monitoring, persistence). Read this before touching any screen or service.
