@@ -16,10 +16,11 @@ import { Colors, Layout } from '../../constants';
 import { FieldMap } from '../../components/mission';
 import OperationPanel from '../../components/mission/OperationPanel';
 import BigButton from '../../components/common/BigButton';
+import EmergencyStopButton from '../../components/controls/EmergencyStopButton';
 import { missionsApi } from '../../api/missions';
 import { useSimulation } from '../../hooks/useSimulation';
 import { compileMission, validateMission } from '../../services/missionCompiler';
-import { uploadMission } from '../../services/missionUploader';
+import { uploadMission, downloadMission, verifyMissionMatches } from '../../services/missionUploader';
 import { mavlinkService } from '../../services/MavlinkService';
 import { MissionUploadState } from '../../types/mission';
 
@@ -63,6 +64,29 @@ export default function FieldPlannerScreen() {
       createNewPlan(machineId || 1, 'New Field Plan');
     }
   }, [currentPlan, createNewPlan, machineId]);
+
+  // Default the implement width from the machine's saved setup
+  useEffect(() => {
+    if (!currentPlan || currentPlan.implementWidthM !== undefined) return;
+    (async () => {
+      try {
+        const { machinesApi } = await import('../../api/machines');
+        const machine = await machinesApi.get(machineId || 1);
+        if (machine.implementWidthM) {
+          setImplementWidth(machine.implementWidthM);
+        }
+      } catch {
+        // Backend offline — keep the 1 m default
+      }
+    })();
+  }, [currentPlan?.localId]);
+
+  // When a saved plan with points is loaded, jump straight to the route view
+  useEffect(() => {
+    if (currentPlan?.workPoints?.length) {
+      setMapMode('points');
+    }
+  }, [currentPlan?.localId]);
 
   // Simulation: preview the machine driving the planned path
   const simPath = useMemo(
@@ -130,7 +154,21 @@ export default function FieldPlannerScreen() {
           setUploadProgress
         );
         if (result.success) {
-          Alert.alert('Success', 'Field plan sent to the machine!');
+          // Read the mission back to confirm the machine has exactly what we sent
+          try {
+            const downloaded = await downloadMission(mavlinkService, mavlinkService);
+            const verdict = verifyMissionMatches(items, downloaded);
+            if (verdict.match) {
+              Alert.alert('Success', 'Field plan sent and verified on the machine!');
+            } else {
+              Alert.alert(
+                'Verification Warning',
+                `Plan was sent, but the check found a difference: ${verdict.error}. Consider sending again.`
+              );
+            }
+          } catch {
+            Alert.alert('Success', 'Field plan sent! (Could not verify — machine did not answer the read-back.)');
+          }
         } else {
           Alert.alert('Send Failed', result.error ?? 'The machine did not accept the plan.');
         }
@@ -472,6 +510,9 @@ export default function FieldPlannerScreen() {
           variant="primary"
         />
       </View>
+
+      {/* Emergency Stop — must be visible on every operational screen */}
+      <EmergencyStopButton />
 
       {/* Work Point Editor */}
       {Platform.OS === 'web' ? (

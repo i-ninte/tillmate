@@ -3,7 +3,7 @@
  * Creates MAVLink command structures for sending to the machine
  */
 
-import { CommandLongParams, MissionItemInt, MavCmd } from '../types';
+import { CommandLongParams, MissionItemInt, MavCmd, RoverMode } from '../types';
 import {
   TARGET,
   SERVO_CHANNEL,
@@ -117,6 +117,63 @@ export function buildArmDisarm(arm: boolean): CommandLongParams {
     param6: 0,
     param7: 0,
   };
+}
+
+/**
+ * Builds a DO_SET_MODE command (param1=1 enables custom mode, param2=mode).
+ */
+export function buildSetMode(customMode: number): CommandLongParams {
+  return {
+    targetSystem: TARGET.SYSTEM_ID,
+    targetComponent: TARGET.COMPONENT_ID,
+    command: MavCmd.DO_SET_MODE,
+    confirmation: 0,
+    param1: 1, // MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
+    param2: customMode,
+    param3: 0,
+    param4: 0,
+    param5: 0,
+    param6: 0,
+    param7: 0,
+  };
+}
+
+/**
+ * Builds a MISSION_START command (run the uploaded mission from the top).
+ */
+export function buildMissionStart(): CommandLongParams {
+  return {
+    targetSystem: TARGET.SYSTEM_ID,
+    targetComponent: TARGET.COMPONENT_ID,
+    command: MavCmd.MISSION_START,
+    confirmation: 0,
+    param1: 0, // first item
+    param2: 0, // last item (0 = end of mission)
+    param3: 0,
+    param4: 0,
+    param5: 0,
+    param6: 0,
+    param7: 0,
+  };
+}
+
+/**
+ * Farmer-facing mission run commands, in send order.
+ */
+export function buildStartWorking(): CommandLongParams[] {
+  return [buildArmDisarm(true), buildSetMode(RoverMode.AUTO), buildMissionStart()];
+}
+
+export function buildPauseWorking(): CommandLongParams {
+  return buildSetMode(RoverMode.HOLD);
+}
+
+export function buildResumeWorking(): CommandLongParams {
+  return buildSetMode(RoverMode.AUTO);
+}
+
+export function buildReturnToStart(): CommandLongParams {
+  return buildSetMode(RoverMode.RTL);
 }
 
 /**

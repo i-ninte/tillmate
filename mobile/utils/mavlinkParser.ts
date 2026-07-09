@@ -87,6 +87,9 @@ function getCrcExtra(msgId: number): number {
     case MavMsgId.MISSION_CLEAR_ALL: return CRC_EXTRA.MISSION_CLEAR_ALL;
     case MavMsgId.MISSION_REQUEST_INT: return CRC_EXTRA.MISSION_REQUEST_INT;
     case MavMsgId.MISSION_REQUEST: return 230;
+    case MavMsgId.MISSION_REQUEST_LIST: return 132;
+    case MavMsgId.MISSION_CURRENT: return 28;
+    case MavMsgId.MISSION_ITEM_REACHED: return 11;
     default: return 0;
   }
 }
@@ -400,10 +403,129 @@ export function encodeMissionItemInt(
 }
 
 /**
+ * Encode a MISSION_REQUEST_LIST message (start mission download)
+ */
+export function encodeMissionRequestList(
+  targetSystem: number,
+  targetComponent: number,
+  missionType: number = 0,
+  sysId: number = 255,
+  compId: number = 190
+): Uint8Array {
+  const payload = new Uint8Array(3);
+  payload[0] = targetSystem;
+  payload[1] = targetComponent;
+  payload[2] = missionType;
+  return encodeMessage(MavMsgId.MISSION_REQUEST_LIST, payload, sysId, compId);
+}
+
+/**
+ * Encode a MISSION_REQUEST_INT message (request one item during download)
+ */
+export function encodeMissionRequestInt(
+  seq: number,
+  targetSystem: number,
+  targetComponent: number,
+  missionType: number = 0,
+  sysId: number = 255,
+  compId: number = 190
+): Uint8Array {
+  const payload = new Uint8Array(5);
+  const view = new DataView(payload.buffer);
+  view.setUint16(0, seq, true);
+  payload[2] = targetSystem;
+  payload[3] = targetComponent;
+  payload[4] = missionType;
+  return encodeMessage(MavMsgId.MISSION_REQUEST_INT, payload, sysId, compId);
+}
+
+/**
+ * Encode a MISSION_ACK message (finish mission download)
+ */
+export function encodeMissionAck(
+  targetSystem: number,
+  targetComponent: number,
+  type: number = 0,
+  missionType: number = 0,
+  sysId: number = 255,
+  compId: number = 190
+): Uint8Array {
+  const payload = new Uint8Array(4);
+  payload[0] = targetSystem;
+  payload[1] = targetComponent;
+  payload[2] = type;
+  payload[3] = missionType;
+  return encodeMessage(MavMsgId.MISSION_ACK, payload, sysId, compId);
+}
+
+/** Pads a possibly zero-trimmed MAVLink 2 payload to a fixed length */
+function padPayload(payload: Uint8Array, length: number): Uint8Array {
+  if (payload.length >= length) return payload;
+  const padded = new Uint8Array(length);
+  padded.set(payload, 0);
+  return padded;
+}
+
+/**
+ * Parse a MISSION_COUNT payload
+ */
+export function parseMissionCount(payload: Uint8Array): { count: number } | null {
+  const p = padPayload(payload, 5);
+  const view = new DataView(p.buffer, p.byteOffset);
+  return { count: view.getUint16(0, true) };
+}
+
+/**
+ * Parse a MISSION_ITEM_INT payload into a MissionItemInt shape
+ */
+export function parseMissionItemInt(payload: Uint8Array): {
+  seq: number;
+  frame: number;
+  command: number;
+  current: number;
+  autocontinue: number;
+  param1: number;
+  param2: number;
+  param3: number;
+  param4: number;
+  x: number;
+  y: number;
+  z: number;
+  missionType: number;
+} | null {
+  const p = padPayload(payload, 38);
+  const view = new DataView(p.buffer, p.byteOffset);
+  return {
+    param1: view.getFloat32(0, true),
+    param2: view.getFloat32(4, true),
+    param3: view.getFloat32(8, true),
+    param4: view.getFloat32(12, true),
+    x: view.getInt32(16, true),
+    y: view.getInt32(20, true),
+    z: view.getFloat32(24, true),
+    seq: view.getUint16(28, true),
+    command: view.getUint16(30, true),
+    frame: p[34],
+    current: p[35],
+    autocontinue: p[36],
+    missionType: p[37],
+  };
+}
+
+/**
  * Parse a MISSION_REQUEST_INT (or MISSION_REQUEST) payload — both start with seq uint16
  */
 export function parseMissionRequest(payload: Uint8Array): { seq: number } | null {
   // MAVLink 2 trims trailing zero bytes — short payload means seq bytes are 0
+  const b0 = payload.length > 0 ? payload[0] : 0;
+  const b1 = payload.length > 1 ? payload[1] : 0;
+  return { seq: b0 | (b1 << 8) };
+}
+
+/**
+ * Parse a MISSION_CURRENT or MISSION_ITEM_REACHED payload (seq uint16)
+ */
+export function parseMissionSeq(payload: Uint8Array): { seq: number } {
   const b0 = payload.length > 0 ? payload[0] : 0;
   const b1 = payload.length > 1 ? payload[1] : 0;
   return { seq: b0 | (b1 << 8) };

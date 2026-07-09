@@ -27,9 +27,16 @@ import {
   encodeMissionCount,
   encodeMissionClearAll,
   encodeMissionItemInt,
+  encodeMissionRequestList,
+  encodeMissionRequestInt,
+  encodeMissionAck,
   parseMissionRequest,
   parseMissionAck,
+  parseMissionCount,
+  parseMissionItemInt,
+  parseMissionSeq,
 } from '../utils/mavlinkParser';
+import { useMissionStore } from '../store/missionStore';
 import { MissionItemInt } from '../types';
 import { useConnectionStore } from '../store/connectionStore';
 import { useTelemetryStore } from '../store/telemetryStore';
@@ -357,6 +364,26 @@ class MavlinkService {
         if (ack) this.resolveWaiters(MavMsgId.MISSION_ACK, ack);
         break;
       }
+      case MavMsgId.MISSION_CURRENT: {
+        const { seq } = parseMissionSeq(msg.payload);
+        useMissionStore.getState().setExecutionProgress({ currentSeq: seq });
+        break;
+      }
+      case MavMsgId.MISSION_ITEM_REACHED: {
+        const { seq } = parseMissionSeq(msg.payload);
+        useMissionStore.getState().setExecutionProgress({ reachedSeq: seq });
+        break;
+      }
+      case MavMsgId.MISSION_COUNT: {
+        const count = parseMissionCount(msg.payload);
+        if (count) this.resolveWaiters(MavMsgId.MISSION_COUNT, count);
+        break;
+      }
+      case MavMsgId.MISSION_ITEM_INT: {
+        const item = parseMissionItemInt(msg.payload);
+        if (item) this.resolveWaiters(MavMsgId.MISSION_ITEM_INT, item);
+        break;
+      }
       default:
         // Ignore unknown messages
         break;
@@ -386,14 +413,14 @@ class MavlinkService {
       this.onConnectionChange?.(true);
     }
 
-    // Map system status to mode
+    // Map ArduPilot Rover custom mode to farmer-facing mode
     let mode: MachineMode = MachineMode.UNKNOWN;
     switch (heartbeat.customMode) {
       case 0: mode = MachineMode.MANUAL; break;
-      case 3: mode = MachineMode.AUTO; break;
-      case 4: mode = MachineMode.GUIDED; break;
-      case 5: mode = MachineMode.HOLD; break;
-      case 6: mode = MachineMode.RTL; break;
+      case 4: mode = MachineMode.HOLD; break;
+      case 10: mode = MachineMode.AUTO; break;
+      case 11: mode = MachineMode.RTL; break;
+      case 15: mode = MachineMode.GUIDED; break;
     }
 
     this.onTelemetryUpdate?.({ mode });
@@ -566,6 +593,24 @@ class MavlinkService {
   async sendMissionItemInt(item: MissionItemInt): Promise<void> {
     this.sendRaw(
       encodeMissionItemInt(item, this.machineSystemId, this.machineComponentId)
+    );
+  }
+
+  async sendMissionRequestList(): Promise<void> {
+    this.sendRaw(
+      encodeMissionRequestList(this.machineSystemId, this.machineComponentId)
+    );
+  }
+
+  async sendMissionRequestInt(seq: number): Promise<void> {
+    this.sendRaw(
+      encodeMissionRequestInt(seq, this.machineSystemId, this.machineComponentId)
+    );
+  }
+
+  async sendMissionAck(type: number = 0): Promise<void> {
+    this.sendRaw(
+      encodeMissionAck(this.machineSystemId, this.machineComponentId, type)
     );
   }
 

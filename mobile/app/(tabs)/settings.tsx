@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Layout } from '../../constants';
 import { useConnectionStore } from '../../store';
 import { setApiBaseUrl } from '../../api/client';
+import { machinesApi } from '../../api/machines';
 
 export default function SettingsScreen() {
   const connected = useConnectionStore((s) => s.connected);
@@ -24,6 +25,38 @@ export default function SettingsScreen() {
   const [machinePort, setMachinePort] = useState(targetPort.toString());
   const [backendUrl, setBackendUrl] = useState('http://localhost:8000');
   const [autoConnect, setAutoConnect] = useState(true);
+  const machineId = useConnectionStore((s) => s.machineId);
+  const [implementWidth, setImplementWidth] = useState('');
+  const [savingWidth, setSavingWidth] = useState(false);
+
+  // Load the machine's implement width for editing
+  useEffect(() => {
+    (async () => {
+      try {
+        const machine = await machinesApi.get(machineId || 1);
+        setImplementWidth(String(machine.implementWidthM ?? 1));
+      } catch {
+        // Backend may be offline — leave the field blank
+      }
+    })();
+  }, [machineId]);
+
+  const handleSaveImplementWidth = async () => {
+    const width = parseFloat(implementWidth);
+    if (isNaN(width) || width < 0.1 || width > 20) {
+      Alert.alert('Invalid Width', 'Enter the implement width in meters (0.1 – 20).');
+      return;
+    }
+    setSavingWidth(true);
+    try {
+      await machinesApi.update(machineId || 1, { implementWidthM: width });
+      Alert.alert('Saved', 'Implement width saved. New field plans will use it.');
+    } catch {
+      Alert.alert('Error', 'Could not save. Is the backend server reachable?');
+    } finally {
+      setSavingWidth(false);
+    }
+  };
 
   // Redirect to connection screen if disconnected
   useEffect(() => {
@@ -147,6 +180,37 @@ export default function SettingsScreen() {
           <TouchableOpacity style={styles.saveButton} onPress={handleSaveBackendUrl}>
             <Ionicons name="save-outline" size={20} color={Colors.textPrimary} />
             <Text style={styles.saveButtonText}>Save Backend URL</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Machine Setup */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="construct" size={24} color={Colors.primary} />
+            <Text style={styles.sectionTitle}>Machine Setup</Text>
+          </View>
+
+          <View style={styles.settingRow}>
+            <Text style={styles.settingLabel}>Implement Width (m)</Text>
+            <TextInput
+              style={styles.textInput}
+              value={implementWidth}
+              onChangeText={setImplementWidth}
+              placeholder="1.0"
+              placeholderTextColor={Colors.textDisabled}
+              keyboardType="decimal-pad"
+            />
+          </View>
+
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={handleSaveImplementWidth}
+            disabled={savingWidth}
+          >
+            <Ionicons name="save-outline" size={20} color={Colors.textPrimary} />
+            <Text style={styles.saveButtonText}>
+              {savingWidth ? 'Saving...' : 'Save Machine Setup'}
+            </Text>
           </TouchableOpacity>
         </View>
 

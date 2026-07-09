@@ -267,6 +267,20 @@ export function validateMission(items: MissionItemInt[]): { valid: boolean; erro
 }
 
 /**
+ * Maps a mission item sequence number (as reported by MISSION_CURRENT /
+ * MISSION_ITEM_REACHED) to the 1-based work point number the farmer sees.
+ * Item 0 is the home waypoint and counts as 0.
+ */
+export function workPointNumberForSeq(items: MissionItemInt[], seq: number): number {
+  let waypoints = 0;
+  const end = Math.min(seq, items.length - 1);
+  for (let i = 1; i <= end; i++) {
+    if (items[i].command === MavCmdNav.NAV_WAYPOINT) waypoints++;
+  }
+  return waypoints;
+}
+
+/**
  * Gets mission statistics for display
  */
 export function getMissionStats(items: MissionItemInt[]): {
