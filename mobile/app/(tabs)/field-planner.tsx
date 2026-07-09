@@ -18,6 +18,10 @@ import OperationPanel from '../../components/mission/OperationPanel';
 import BigButton from '../../components/common/BigButton';
 import { missionsApi } from '../../api/missions';
 import { useSimulation } from '../../hooks/useSimulation';
+import { compileMission, validateMission } from '../../services/missionCompiler';
+import { uploadMission } from '../../services/missionUploader';
+import { mavlinkService } from '../../services/MavlinkService';
+import { MissionUploadState } from '../../types/mission';
 
 // Only import WorkPointEditor on native (it uses BottomSheet which needs Reanimated)
 const WorkPointEditor = Platform.OS !== 'web'
@@ -41,6 +45,11 @@ export default function FieldPlannerScreen() {
     generatePath,
   } = useMissionStore();
   const machineId = useConnectionStore((s) => s.machineId);
+  const connected = useConnectionStore((s) => s.connected);
+  const simulationMode = useConnectionStore((s) => s.simulationMode);
+  const setUploadProgress = useMissionStore((s) => s.setUploadProgress);
+  const uploadProgress = useMissionStore((s) => s.uploadProgress);
+  const resetUpload = useMissionStore((s) => s.resetUpload);
   const [isSending, setIsSending] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
@@ -76,14 +85,64 @@ export default function FieldPlannerScreen() {
       Alert.alert('No Work Points', 'Please add at least one work point to send.');
       return;
     }
+    if (!currentPlan) return;
+
+    // Compile the plan into MAVLink mission items
+    const items = compileMission({ ...currentPlan, workPoints });
+    const validation = validateMission(items);
+    if (!validation.valid) {
+      Alert.alert('Plan Problem', validation.error);
+      return;
+    }
+
+    if (!connected && !simulationMode) {
+      Alert.alert(
+        'Not Connected',
+        'Connect to the machine first, then send the plan.'
+      );
+      return;
+    }
 
     setIsSending(true);
+    resetUpload();
 
-    // TODO: Implement mission upload via missionUploader
-    setTimeout(() => {
+    try {
+      if (simulationMode || !mavlinkService.getIsConnected()) {
+        // Simulation: preview the upload without a machine
+        for (let i = 0; i < items.length; i++) {
+          setUploadProgress({
+            state: MissionUploadState.SENDING_ITEMS,
+            currentItem: i + 1,
+            totalItems: items.length,
+          });
+          await new Promise((r) => setTimeout(r, 30));
+        }
+        setUploadProgress({ state: MissionUploadState.COMPLETE });
+        Alert.alert(
+          'Sent (Simulation)',
+          `${items.length} steps prepared. Connect to the machine to send for real.`
+        );
+      } else {
+        const result = await uploadMission(
+          items,
+          mavlinkService,
+          mavlinkService,
+          setUploadProgress
+        );
+        if (result.success) {
+          Alert.alert('Success', 'Field plan sent to the machine!');
+        } else {
+          Alert.alert('Send Failed', result.error ?? 'The machine did not accept the plan.');
+        }
+      }
+    } catch (e) {
+      Alert.alert(
+        'Send Failed',
+        e instanceof Error ? e.message : 'Something went wrong while sending.'
+      );
+    } finally {
       setIsSending(false);
-      Alert.alert('Success', 'Field plan sent to machine!');
-    }, 2000);
+    }
   };
 
   const handleSavePlan = () => {
@@ -400,7 +459,13 @@ export default function FieldPlannerScreen() {
       {/* Action Buttons */}
       <View style={styles.actions}>
         <BigButton
-          label={isSending ? 'Sending...' : `Send to Machine (${workPoints.length} points)`}
+          label={
+            isSending
+              ? uploadProgress.totalItems > 0
+                ? `Sending ${uploadProgress.currentItem}/${uploadProgress.totalItems}...`
+                : 'Sending...'
+              : `Send to Machine (${workPoints.length} points)`
+          }
           onPress={handleSendToMachine}
           disabled={workPoints.length === 0 || isSending}
           loading={isSending}

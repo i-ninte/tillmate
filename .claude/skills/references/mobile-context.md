@@ -44,7 +44,7 @@
 ### MAVLink Services
 | Service | Status | Location | Purpose |
 |---------|--------|----------|---------|
-| MavlinkService | NOT_STARTED | `/mobile/services/MavlinkService.ts` | UDP socket singleton |
+| MavlinkService | COMPLETE | `/mobile/services/MavlinkService.ts` | UDP socket singleton; telemetry, mission protocol send/waitForMessage |
 | MavlinkParser | NOT_STARTED | `/mobile/services/MavlinkParser.ts` | Bytes → messages |
 | MavlinkSender | NOT_STARTED | `/mobile/services/MavlinkSender.ts` | Messages → bytes |
 | missionCompiler | COMPLETE | `/mobile/services/missionCompiler.ts` | FieldPlan → MissionItems (depth-aware servo PWM) |
@@ -208,16 +208,18 @@
 | 2026-07-09 | Route simulation preview (play/stop, animated marker) | services/simulation.ts, hooks/useSimulation.ts, app/(tabs)/field-planner.tsx |
 | 2026-07-09 | Field planner: Draw Field / Route Points modes + Generate Route | app/(tabs)/field-planner.tsx |
 | 2026-07-09 | API round-trips operation/depth/width/boundary | api/missions.ts |
+| 2026-07-09 | Mission protocol encoders/parsers (COUNT, CLEAR_ALL, ITEM_INT, REQUEST, ACK) | utils/mavlinkParser.ts, types/mavlink.ts |
+| 2026-07-09 | MavlinkService implements MavlinkSender/Receiver (waitForMessage + mission sends) | services/MavlinkService.ts |
+| 2026-07-09 | Send to Machine wired: compile → validate → uploadMission with live progress; simulation-mode fallback | app/(tabs)/field-planner.tsx, __tests__/missionUpload.test.ts |
 
 ---
 
 ## Known Issues / TODOs
 
-- MAVLink UDP socket services not yet implemented (MavlinkService, MavlinkParser, MavlinkSender)
 - Hooks not yet implemented (useMavlinkService, useInterval, useTelemetryThrottle)
 - Telemetry logger not yet implemented
 - Map only works on mobile (web shows placeholder list with editing)
-- Need to integrate mission compiler with actual MAVLink send when MavlinkService is ready
+- Mission upload untested against real hardware (bench-test with Pixhawk + DroneBridge per 11-testing-guide.md)
 - Need to add Google Maps API key for production (currently using Apple Maps on iOS)
 
 ---
