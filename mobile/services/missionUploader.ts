@@ -20,6 +20,9 @@ export interface MavlinkSender {
   sendMissionClearAll(): Promise<void>;
   sendMissionCount(count: number, missionType?: number): Promise<void>;
   sendMissionItemInt(item: MissionItemInt): Promise<void>;
+  sendMissionRequestList(): Promise<void>;
+  sendMissionRequestInt(seq: number): Promise<void>;
+  sendMissionAck(type?: number): Promise<void>;
 }
 
 /**
@@ -218,19 +221,77 @@ function getMissionResultMessage(result: MavMissionResult): string {
 }
 
 /**
- * Downloads the current mission from the machine.
- * (For future implementation - read back mission to verify)
+ * Downloads the current mission from the machine (used to verify an upload).
+ *
+ * 1. Send MISSION_REQUEST_LIST
+ * 2. Wait for MISSION_COUNT
+ * 3. For each seq, send MISSION_REQUEST_INT and wait for the matching MISSION_ITEM_INT
+ * 4. Send MISSION_ACK when complete
+ *
+ * Throws on timeout so callers can distinguish "empty mission" from "no reply".
  */
 export async function downloadMission(
   sender: MavlinkSender,
   receiver: MavlinkReceiver
 ): Promise<MissionItemInt[]> {
-  // TODO: Implement mission download
-  // 1. Send MISSION_REQUEST_LIST
-  // 2. Wait for MISSION_COUNT
-  // 3. For each item, send MISSION_REQUEST_INT and wait for MISSION_ITEM_INT
-  // 4. Send MISSION_ACK when complete
-  throw new Error('Mission download not yet implemented');
+  await sender.sendMissionRequestList();
+
+  const countMsg = await receiver.waitForMessage(
+    MavMsgId.MISSION_COUNT,
+    TIMEOUT.MISSION_REQUEST
+  );
+  if (!countMsg) {
+    throw new Error('Machine did not respond to mission download request');
+  }
+
+  const count = countMsg.count as number;
+  const items: MissionItemInt[] = [];
+
+  for (let seq = 0; seq < count; seq++) {
+    let item: any = null;
+    for (let attempt = 0; attempt < MAX_RETRIES.MISSION_ITEM && !item; attempt++) {
+      await sender.sendMissionRequestInt(seq);
+      item = await receiver.waitForMessage(
+        MavMsgId.MISSION_ITEM_INT,
+        TIMEOUT.MISSION_REQUEST,
+        (m) => m.seq === seq
+      );
+    }
+    if (!item) {
+      throw new Error(`Timed out downloading mission item ${seq}`);
+    }
+    items.push(item as MissionItemInt);
+  }
+
+  await sender.sendMissionAck(MavMissionResult.ACCEPTED);
+  return items;
+}
+
+/**
+ * Compares a locally compiled mission with one downloaded from the machine.
+ * Checks count, order, commands, and navigation coordinates.
+ */
+export function verifyMissionMatches(
+  local: MissionItemInt[],
+  downloaded: MissionItemInt[]
+): { match: boolean; error?: string } {
+  if (local.length !== downloaded.length) {
+    return {
+      match: false,
+      error: `Item count differs: sent ${local.length}, machine has ${downloaded.length}`,
+    };
+  }
+  for (let i = 0; i < local.length; i++) {
+    const a = local[i];
+    const b = downloaded[i];
+    if (a.command !== b.command) {
+      return { match: false, error: `Item ${i}: command differs (${a.command} vs ${b.command})` };
+    }
+    if (a.x !== b.x || a.y !== b.y) {
+      return { match: false, error: `Item ${i}: coordinates differ` };
+    }
+  }
+  return { match: true };
 }
 
 /**

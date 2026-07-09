@@ -8,6 +8,7 @@ interface BackendFieldPlanSummary {
   name: string;
   notes: string | null;
   return_to_home: boolean;
+  operation: 'tilling' | 'weeding' | 'spraying' | null;
   point_count: number;
   created_at: string;
 }
@@ -76,6 +77,7 @@ const transformSummary = (summary: BackendFieldPlanSummary): FieldPlanSummary =>
   name: summary.name,
   notes: summary.notes,
   returnToHome: summary.return_to_home,
+  operation: summary.operation ?? undefined,
   workPointCount: summary.point_count,
   createdAt: summary.created_at,
 });

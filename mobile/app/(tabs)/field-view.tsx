@@ -14,7 +14,9 @@ import FarmDashboard from '../../components/dashboard/FarmDashboard';
 import FarmControlPanel from '../../components/controls/FarmControlPanel';
 import ConnectionBanner from '../../components/common/ConnectionBanner';
 import EmergencyStopButton from '../../components/controls/EmergencyStopButton';
+import MissionRunControls from '../../components/controls/MissionRunControls';
 import { FieldMap } from '../../components/mission';
+import { compileMission, workPointNumberForSeq } from '../../services/missionCompiler';
 
 export default function FieldViewScreen() {
   const connected = useConnectionStore((s) => s.connected);
@@ -23,13 +25,41 @@ export default function FieldViewScreen() {
   const lonDeg = useTelemetryStore((s) => s.lonDeg);
   const headingDeg = useTelemetryStore((s) => s.headingDeg);
   const gpsFixed = useTelemetryStore((s) => s.gpsFixed);
-  const { workPoints, currentPlan } = useMissionStore();
+  const { workPoints, currentPlan, executionProgress } = useMissionStore();
   const [showMap, setShowMap] = useState(true);
+  const [breadcrumbs, setBreadcrumbs] = useState<{ lat: number; lon: number }[]>([]);
 
   // Machine location from telemetry
   const machineLocation = gpsFixed && latDeg !== null && lonDeg !== null
     ? { lat: latDeg, lon: lonDeg }
     : null;
+
+  // Record breadcrumb trail while the machine moves (~1m minimum step)
+  useEffect(() => {
+    if (!machineLocation) return;
+    setBreadcrumbs((prev) => {
+      const last = prev[prev.length - 1];
+      if (
+        last &&
+        Math.abs(last.lat - machineLocation.lat) < 1e-5 &&
+        Math.abs(last.lon - machineLocation.lon) < 1e-5
+      ) {
+        return prev;
+      }
+      const next = [...prev, machineLocation];
+      return next.length > 2000 ? next.slice(-2000) : next;
+    });
+  }, [latDeg, lonDeg, gpsFixed]);
+
+  // Live mission progress: map the autopilot's item seq to a work point number
+  const compiledItems = React.useMemo(
+    () => (currentPlan && workPoints.length > 0 ? compileMission({ ...currentPlan, workPoints }) : []),
+    [currentPlan, workPoints]
+  );
+  const activePointNumber =
+    executionProgress.currentSeq !== null && compiledItems.length > 0
+      ? workPointNumberForSeq(compiledItems, executionProgress.currentSeq)
+      : null;
 
   // Redirect to connection screen if disconnected
   useEffect(() => {
@@ -83,6 +113,8 @@ export default function FieldViewScreen() {
                 showPath={true}
                 machineLocation={machineLocation}
                 machineHeading={headingDeg}
+                activePointNumber={activePointNumber}
+                breadcrumbs={breadcrumbs}
                 initialRegion={
                   machineLocation
                     ? {
@@ -122,7 +154,9 @@ export default function FieldViewScreen() {
                 <View style={styles.planOverlay}>
                   <Ionicons name="flag" size={16} color={Colors.primary} />
                   <Text style={styles.planOverlayText}>
-                    {currentPlan?.name || 'Current Plan'}: {workPoints.length} points
+                    {activePointNumber && activePointNumber > 0
+                      ? `Working point ${activePointNumber} of ${workPoints.length}`
+                      : `${currentPlan?.name || 'Current Plan'}: ${workPoints.length} points`}
                   </Text>
                 </View>
               )}
@@ -137,6 +171,7 @@ export default function FieldViewScreen() {
 
         {/* Control Panel - Bottom section */}
         <View style={styles.controlSection}>
+          <MissionRunControls />
           <FarmControlPanel onPlanMission={handlePlanMission} />
         </View>
       </View>

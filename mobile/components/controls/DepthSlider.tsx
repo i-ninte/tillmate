@@ -3,6 +3,9 @@ import { View, Text, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useControlStore, useTelemetryStore } from '../../store';
 import { Colors, Layout } from '../../constants';
+import { mavlinkService } from '../../services/MavlinkService';
+import { buildImplementDepth } from '../../utils/mavlinkBuilders';
+import { telemetryLogger } from '../../services/telemetryLogger';
 
 interface DepthSliderProps {
   disabled?: boolean;
@@ -21,16 +24,25 @@ export default function DepthSlider({ disabled = false }: DepthSliderProps) {
   };
 
   const handleSlidingComplete = async (value: number) => {
-    // Only send command on release (not during drag)
+    // Only send command on release (not during drag) — safety rule
     setDepthPending(true);
 
-    // TODO: Send MAVLink command via MavlinkService
-    // MAV_CMD_DO_SET_SERVO with channel=9, PWM mapped from 0-100% to 1000-2000
+    if (mavlinkService.getIsConnected()) {
+      const params = buildImplementDepth(value);
+      mavlinkService.sendCommand(params);
+      telemetryLogger.logCommand({
+        commandId: params.command,
+        commandName: 'DO_SET_SERVO',
+        param1: params.param1,
+        param2: params.param2,
+        source: 'realtime',
+      });
+    }
 
-    // Simulate for now
+    // Reflect the target immediately; actual depth arrives via telemetry
     setTimeout(() => {
       setDepth(value);
-    }, 500);
+    }, mavlinkService.getIsConnected() ? 300 : 500);
   };
 
   const displayDepth =

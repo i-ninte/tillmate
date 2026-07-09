@@ -16,6 +16,9 @@ interface MissionState {
   // Upload progress
   uploadProgress: MissionUploadProgress;
 
+  // Live execution progress (from MISSION_CURRENT / MISSION_ITEM_REACHED)
+  executionProgress: { currentSeq: number | null; reachedSeq: number | null };
+
   // Saved plans (from backend) - summaries for list view
   savedPlans: FieldPlanSummary[];
 
@@ -48,6 +51,10 @@ interface MissionState {
   setUploadProgress: (progress: Partial<MissionUploadProgress>) => void;
   resetUpload: () => void;
 
+  // Actions - Execution
+  setExecutionProgress: (progress: Partial<{ currentSeq: number | null; reachedSeq: number | null }>) => void;
+  resetExecution: () => void;
+
   // Actions - Saved Plans
   setSavedPlans: (plans: FieldPlanSummary[]) => void;
 
@@ -60,11 +67,14 @@ const initialUploadProgress: MissionUploadProgress = {
   totalItems: 0,
 };
 
+const initialExecutionProgress = { currentSeq: null, reachedSeq: null };
+
 const initialState = {
   currentPlan: null,
   workPoints: [],
   selectedPointId: null,
   uploadProgress: initialUploadProgress,
+  executionProgress: initialExecutionProgress,
   savedPlans: [],
 };
 
@@ -221,6 +231,12 @@ export const useMissionStore = create<MissionState>((set, get) => ({
   })),
 
   resetUpload: () => set({ uploadProgress: initialUploadProgress }),
+
+  setExecutionProgress: (progress) => set((state) => ({
+    executionProgress: { ...state.executionProgress, ...progress },
+  })),
+
+  resetExecution: () => set({ executionProgress: initialExecutionProgress }),
 
   setSavedPlans: (plans) => set({ savedPlans: plans }),
 

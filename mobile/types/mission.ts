@@ -73,6 +73,7 @@ export interface FieldPlanSummary {
   name: string;
   notes: string | null;
   returnToHome: boolean;
+  operation?: Operation;
   workPointCount: number;  // Maps from backend point_count
   createdAt: string;
 }
@@ -109,6 +110,9 @@ export interface Machine {
   actuatorPwmMin: number;
   actuatorPwmMax: number;
 
+  // Implement working width (meters) — planner default for path generation
+  implementWidthM: number;
+
   // Battery thresholds
   batteryWarnV: number;
   batteryCriticalV: number;
@@ -124,6 +128,7 @@ export interface MachineCreate {
   wifiSsid: string;
   actuatorMinMm?: number;
   actuatorMaxMm?: number;
+  implementWidthM?: number;
   batteryWarnV?: number;
   batteryCriticalV?: number;
 }

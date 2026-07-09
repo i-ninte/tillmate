@@ -10,8 +10,11 @@ export enum MavMsgId {
   GPS_RAW_INT = 24,
   GLOBAL_POSITION_INT = 33,
   MISSION_REQUEST = 40,
+  MISSION_REQUEST_LIST = 43,
   MISSION_COUNT = 44,
   MISSION_CLEAR_ALL = 45,
+  MISSION_CURRENT = 42,
+  MISSION_ITEM_REACHED = 46,
   MISSION_ITEM_INT = 73,
   MISSION_REQUEST_INT = 51,
   MISSION_ACK = 47,
@@ -23,9 +26,20 @@ export enum MavMsgId {
 
 // MAVLink command IDs (DO_ commands we send)
 export enum MavCmd {
+  DO_SET_MODE = 176,
   DO_SET_RELAY = 181,
   DO_SET_SERVO = 183,
+  MISSION_START = 300,
   COMPONENT_ARM_DISARM = 400,
+}
+
+// ArduPilot Rover custom mode numbers (used with DO_SET_MODE)
+export enum RoverMode {
+  MANUAL = 0,
+  HOLD = 4,
+  AUTO = 10,
+  RTL = 11,
+  GUIDED = 15,
 }
 
 // Mission upload result codes

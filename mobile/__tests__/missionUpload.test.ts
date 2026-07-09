@@ -10,7 +10,13 @@ import {
   parseMissionAck,
   parseBuffer,
 } from '../utils/mavlinkParser';
-import { uploadMission, MavlinkSender, MavlinkReceiver } from '../services/missionUploader';
+import {
+  uploadMission,
+  downloadMission,
+  verifyMissionMatches,
+  MavlinkSender,
+  MavlinkReceiver,
+} from '../services/missionUploader';
 import { compileMission } from '../services/missionCompiler';
 import { buildWorkPointsFromPath } from '../services/operations';
 import { MavMsgId, MavMissionResult, MissionItemInt } from '../types';
@@ -71,11 +77,11 @@ describe('mission message encoding', () => {
   });
 });
 
-describe('uploadMission handshake', () => {
-  function makeFakeMachine(items: MissionItemInt[], opts?: { rejectWith?: MavMissionResult }) {
+function makeFakeMachine(items: MissionItemInt[], opts?: { rejectWith?: MavMissionResult }) {
     let nextRequest = 0;
     const sent: MissionItemInt[] = [];
     let counted = 0;
+    let downloadRequested: number | null = null;
 
     const sender: MavlinkSender = {
       async sendMissionClearAll() {},
@@ -87,10 +93,27 @@ describe('uploadMission handshake', () => {
         sent.push(item);
         nextRequest = item.seq + 1;
       },
+      async sendMissionRequestList() {
+        downloadRequested = -1;
+      },
+      async sendMissionRequestInt(seq: number) {
+        downloadRequested = seq;
+      },
+      async sendMissionAck() {},
     };
 
     const receiver: MavlinkReceiver = {
-      async waitForMessage(msgId: MavMsgId) {
+      async waitForMessage(msgId: MavMsgId, _timeout: number, predicate?: (m: any) => boolean) {
+        if (msgId === MavMsgId.MISSION_COUNT) {
+          return downloadRequested === -1 ? { count: items.length } : null;
+        }
+        if (msgId === MavMsgId.MISSION_ITEM_INT) {
+          if (downloadRequested !== null && downloadRequested >= 0 && downloadRequested < items.length) {
+            const item = items[downloadRequested];
+            if (!predicate || predicate(item)) return item;
+          }
+          return null;
+        }
         if (msgId === MavMsgId.MISSION_REQUEST_INT) {
           if (nextRequest < counted) {
             return { seq: nextRequest };
@@ -129,6 +152,7 @@ describe('uploadMission handshake', () => {
     });
   }
 
+describe('uploadMission handshake', () => {
   test('uploads every item in sequence and succeeds on ACK', async () => {
     const items = compiledItems();
     const machine = makeFakeMachine(items);
@@ -157,5 +181,41 @@ describe('uploadMission handshake', () => {
     const machine = makeFakeMachine([]);
     const result = await uploadMission([], machine.sender, machine.receiver);
     expect(result.success).toBe(false);
+  });
+});
+
+describe('downloadMission + verify', () => {
+  test('downloads all items back and verifies a match', async () => {
+    const items = compiledItems();
+    const machine = makeFakeMachine(items);
+
+    const downloaded = await downloadMission(machine.sender, machine.receiver);
+    expect(downloaded).toHaveLength(items.length);
+
+    const verdict = verifyMissionMatches(items, downloaded);
+    expect(verdict.match).toBe(true);
+  });
+
+  test('verify catches count mismatch', () => {
+    const items = compiledItems();
+    const verdict = verifyMissionMatches(items, items.slice(0, -1));
+    expect(verdict.match).toBe(false);
+    expect(verdict.error).toMatch(/count differs/i);
+  });
+
+  test('verify catches coordinate mismatch', () => {
+    const items = compiledItems();
+    const tampered = items.map((i, idx) =>
+      idx === 0 ? { ...i, x: i.x + 100 } : i
+    );
+    const verdict = verifyMissionMatches(items, tampered);
+    expect(verdict.match).toBe(false);
+    expect(verdict.error).toMatch(/coordinates/i);
+  });
+
+  test('throws when machine never answers the download request', async () => {
+    const silent: MavlinkReceiver = { async waitForMessage() { return null; } };
+    const machine = makeFakeMachine(compiledItems());
+    await expect(downloadMission(machine.sender, silent)).rejects.toThrow(/did not respond/i);
   });
 });

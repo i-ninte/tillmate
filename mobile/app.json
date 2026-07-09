@@ -19,9 +19,6 @@
         "NSLocationWhenInUseUsageDescription": "TillMate needs your location to show your position on the field map and plan routes.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "TillMate needs your location to track the machine during field operations.",
         "NSLocationAlwaysUsageDescription": "TillMate needs your location to track the machine during field operations."
-      },
-      "config": {
-        "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
       }
     },
     "android": {
@@ -37,12 +34,7 @@
         "CHANGE_WIFI_STATE",
         "ACCESS_WIFI_STATE",
         "INTERNET"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
-        }
-      }
+      ]
     },
     "web": {
       "favicon": "./assets/logo.jpeg",
@@ -50,6 +42,7 @@
     },
     "plugins": [
       "expo-router",
+      "@maplibre/maplibre-react-native",
       [
         "expo-location",
         {

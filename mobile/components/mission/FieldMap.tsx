@@ -1,4 +1,19 @@
-import React, { useRef, useCallback, useState, useEffect } from 'react';
+/**
+ * FieldMap — the boundary/route map surface used across the app.
+ *
+ * Renders with MapLibre on all platforms:
+ *   - iOS / Android via `@maplibre/maplibre-react-native`
+ *   - Web via `react-map-gl/maplibre`
+ *
+ * Same public props on both. Base map defaults to satellite (ESRI World
+ * Imagery) so farmers can see their actual field when drawing boundaries.
+ *
+ * Coordinate order note: MapLibre uses `[lon, lat]` everywhere. That's the
+ * boundary between this component and the rest of the app, which uses
+ * `{lat, lon}`. Conversion happens right at the MapLibre calls.
+ */
+
+import React, { useRef, useCallback, useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -7,32 +22,42 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useMissionStore } from '../../store';
 import { WorkPoint, MapRegion } from '../../types';
-import { Colors, Layout } from '../../constants';
+import { Colors, Layout, mapStyleJSONFor, ATTRIBUTIONS, BaseMap } from '../../constants';
 import { locationService } from '../../utils/locationService';
+import WorkPointMarker from './WorkPointMarker';
 
-// Only import MapView on native platforms
-let MapView: any = null;
-let Marker: any = null;
-let Polyline: any = null;
-let Polygon: any = null;
-
+// Lazy-load per-platform MapLibre bindings — mixing them causes bundler errors.
+let RNMap: any = null;
 if (Platform.OS !== 'web') {
-  const Maps = require('react-native-maps');
-  MapView = Maps.default;
-  Marker = Maps.Marker;
-  Polyline = Maps.Polyline;
-  Polygon = Maps.Polygon;
+  try {
+    RNMap = require('@maplibre/maplibre-react-native');
+  } catch {
+    RNMap = null;
+  }
 }
 
-// Import WorkPointMarker only on native
-const WorkPointMarker = Platform.OS !== 'web'
-  ? require('./WorkPointMarker').default
-  : null;
+let WebMap: any = null;
+let WebSource: any = null;
+let WebLayer: any = null;
+let WebMarker: any = null;
+if (Platform.OS === 'web') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const rmg = require('react-map-gl/maplibre');
+    WebMap = rmg.Map;
+    WebSource = rmg.Source;
+    WebLayer = rmg.Layer;
+    WebMarker = rmg.Marker;
+    // Styles must be loaded once for the web canvas to render correctly
+    require('maplibre-gl/dist/maplibre-gl.css');
+  } catch {
+    WebMap = null;
+  }
+}
 
 interface FieldMapProps {
   onPointSelect?: (pointId: string) => void;
@@ -45,15 +70,43 @@ interface FieldMapProps {
   showCurrentLocation?: boolean;
   machineLocation?: { lat: number; lon: number } | null;
   machineHeading?: number | null;
+  // 1-based work point the machine is currently heading to (highlighted)
+  activePointNumber?: number | null;
+  // Trail of where the machine has actually driven
+  breadcrumbs?: { lat: number; lon: number }[];
+  baseMap?: BaseMap;
 }
 
-// Default region (San Francisco - will be overridden by user location)
+// Default region — overwritten by user's location once permission is granted
 const DEFAULT_REGION: MapRegion = {
   latitude: 37.7749,
   longitude: -122.4194,
   latitudeDelta: 0.01,
   longitudeDelta: 0.01,
 };
+
+function toGeoJSONLine(points: { lat: number; lon: number }[]) {
+  return {
+    type: 'Feature' as const,
+    geometry: {
+      type: 'LineString' as const,
+      coordinates: points.map((p) => [p.lon, p.lat]),
+    },
+    properties: {},
+  };
+}
+
+function toGeoJSONPolygon(points: { lat: number; lon: number }[]) {
+  const ring = [...points, points[0]].map((p) => [p.lon, p.lat]);
+  return {
+    type: 'Feature' as const,
+    geometry: {
+      type: 'Polygon' as const,
+      coordinates: [ring],
+    },
+    properties: {},
+  };
+}
 
 export default function FieldMap({
   onPointSelect,
@@ -65,15 +118,15 @@ export default function FieldMap({
   showCurrentLocation = true,
   machineLocation,
   machineHeading,
+  activePointNumber,
+  breadcrumbs,
+  baseMap = 'satellite',
 }: FieldMapProps) {
-  const mapRef = useRef<any>(null);
   const {
     workPoints,
     addWorkPoint,
     selectedPointId,
     selectWorkPoint,
-    removeWorkPoint,
-    updateWorkPoint,
     currentPlan,
     setBoundary,
   } = useMissionStore();
@@ -86,7 +139,14 @@ export default function FieldMap({
   const [mapRegion, setMapRegion] = useState<MapRegion>(initialRegion || DEFAULT_REGION);
   const [isRetryingPermission, setIsRetryingPermission] = useState(false);
 
-  // Handler for retrying location permission - must be defined before conditional returns
+  // Camera refs
+  const cameraRef = useRef<any>(null);
+  const webMapRef = useRef<any>(null);
+
+  // Style JSON is stable per base map
+  const styleJSON = useMemo(() => mapStyleJSONFor(baseMap), [baseMap]);
+
+  // Handler: retry location permission
   const handleRetryPermission = useCallback(async () => {
     setIsRetryingPermission(true);
     try {
@@ -123,26 +183,21 @@ export default function FieldMap({
     }
   }, []);
 
-  // Handler to continue without location - must be defined before conditional returns
   const handleContinueWithoutLocation = useCallback(() => {
     setLocationPermission(true);
     setMapRegion(initialRegion || DEFAULT_REGION);
   }, [initialRegion]);
 
-  // Request location permissions and get current location (cross-platform)
+  // Get location on mount
   useEffect(() => {
     const getLocation = async () => {
       try {
         setIsLoadingLocation(true);
-
-        // Request permissions using cross-platform service
         const permissionResult = await locationService.requestPermissions();
         setLocationPermission(permissionResult.granted);
 
         if (permissionResult.granted) {
-          // Get current position
           const position = await locationService.getCurrentPosition();
-
           if (position) {
             const userLocation = {
               lat: position.coords.latitude,
@@ -168,23 +223,19 @@ export default function FieldMap({
         setIsLoadingLocation(false);
       }
     };
-
     getLocation();
   }, []);
 
-  // Handle map press to add new work point (or boundary corner)
+  // Unified map-press handler; adds a corner or a work point depending on mode
   const handleMapPress = useCallback(
-    (event: any) => {
+    (latitude: number, longitude: number) => {
       if (!editable) return;
-
-      const { latitude, longitude } = event.nativeEvent.coordinate;
 
       if (mode === 'boundary') {
         setBoundary([...boundary, { lat: latitude, lon: longitude }]);
         return;
       }
 
-      // Create new work point
       const newPoint: WorkPoint = {
         id: `wp-${Date.now()}`,
         seq: workPoints.length,
@@ -199,31 +250,24 @@ export default function FieldMap({
       addWorkPoint(newPoint);
       onPointAdded?.(newPoint);
 
-      // Show action configuration dialog
-      if (editable) {
-        Alert.alert(
-          `Point ${workPoints.length + 1} Added`,
-          'Would you like to configure machine actions for this point?',
-          [
-            {
-              text: 'Configure Now',
-              onPress: () => {
-                selectWorkPoint(newPoint.id);
-                onPointSelect?.(newPoint.id);
-              },
+      Alert.alert(
+        `Point ${workPoints.length + 1} Added`,
+        'Would you like to configure machine actions for this point?',
+        [
+          {
+            text: 'Configure Now',
+            onPress: () => {
+              selectWorkPoint(newPoint.id);
+              onPointSelect?.(newPoint.id);
             },
-            {
-              text: 'Configure Later',
-              style: 'cancel',
-            },
-          ]
-        );
-      }
+          },
+          { text: 'Configure Later', style: 'cancel' },
+        ]
+      );
     },
     [editable, mode, boundary, setBoundary, workPoints.length, addWorkPoint, onPointAdded, selectWorkPoint, onPointSelect]
   );
 
-  // Handle marker press
   const handleMarkerPress = useCallback(
     (pointId: string) => {
       selectWorkPoint(pointId);
@@ -232,285 +276,61 @@ export default function FieldMap({
     [selectWorkPoint, onPointSelect]
   );
 
-  // Center map on user location
+  // Camera controls
   const centerOnUser = useCallback(() => {
-    if (currentLocation && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: currentLocation.lat,
-        longitude: currentLocation.lon,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      });
+    if (!currentLocation) return;
+    const target: [number, number] = [currentLocation.lon, currentLocation.lat];
+    if (Platform.OS === 'web') {
+      webMapRef.current?.flyTo({ center: target, zoom: 16, duration: 500 });
+    } else {
+      cameraRef.current?.setCamera({ centerCoordinate: target, zoomLevel: 16, animationDuration: 500 });
     }
   }, [currentLocation]);
 
-  // Center map on machine location
   const centerOnMachine = useCallback(() => {
-    if (machineLocation && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: machineLocation.lat,
-        longitude: machineLocation.lon,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      });
+    if (!machineLocation) return;
+    const target: [number, number] = [machineLocation.lon, machineLocation.lat];
+    if (Platform.OS === 'web') {
+      webMapRef.current?.flyTo({ center: target, zoom: 16, duration: 500 });
+    } else {
+      cameraRef.current?.setCamera({ centerCoordinate: target, zoomLevel: 16, animationDuration: 500 });
     }
   }, [machineLocation]);
 
-  // Fit map to show all points
   const fitToPoints = useCallback(() => {
-    if (workPoints.length > 0 && mapRef.current) {
-      const coordinates = workPoints.map((wp) => ({
-        latitude: wp.lat,
-        longitude: wp.lon,
-      }));
-      mapRef.current.fitToCoordinates(coordinates, {
-        edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-        animated: true,
-      });
+    if (workPoints.length === 0) return;
+    const lats = workPoints.map((p) => p.lat);
+    const lons = workPoints.map((p) => p.lon);
+    const bounds = {
+      sw: [Math.min(...lons), Math.min(...lats)] as [number, number],
+      ne: [Math.max(...lons), Math.max(...lats)] as [number, number],
+    };
+    if (Platform.OS === 'web') {
+      webMapRef.current?.fitBounds([bounds.sw, bounds.ne], { padding: 60, duration: 500 });
+    } else {
+      cameraRef.current?.fitBounds(bounds.ne, bounds.sw, 60, 500);
     }
   }, [workPoints]);
 
-  // Get polyline coordinates from work points
-  const pathCoordinates = workPoints.map((wp) => ({
-    latitude: wp.lat,
-    longitude: wp.lon,
-  }));
+  // GeoJSON payloads memoised so MapLibre doesn't re-diff every render
+  const pathFeature = useMemo(
+    () => (showPath && workPoints.length > 1 ? toGeoJSONLine(workPoints) : null),
+    [showPath, workPoints]
+  );
+  const boundaryFeature = useMemo(
+    () => (boundary.length >= 3 ? toGeoJSONPolygon(boundary) : null),
+    [boundary]
+  );
+  const partialBoundaryFeature = useMemo(
+    () => (boundary.length > 0 && boundary.length < 3 ? toGeoJSONLine(boundary) : null),
+    [boundary]
+  );
+  const breadcrumbFeature = useMemo(
+    () => (breadcrumbs && breadcrumbs.length > 1 ? toGeoJSONLine(breadcrumbs) : null),
+    [breadcrumbs]
+  );
 
-  // Calculate region to fit all points
-  const getRegionForPoints = (): MapRegion => {
-    if (workPoints.length === 0) return mapRegion;
-
-    const lats = workPoints.map((p) => p.lat);
-    const lons = workPoints.map((p) => p.lon);
-
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLon = Math.min(...lons);
-    const maxLon = Math.max(...lons);
-
-    const centerLat = (minLat + maxLat) / 2;
-    const centerLon = (minLon + maxLon) / 2;
-    const deltaLat = Math.max(0.005, (maxLat - minLat) * 1.5);
-    const deltaLon = Math.max(0.005, (maxLon - minLon) * 1.5);
-
-    return {
-      latitude: centerLat,
-      longitude: centerLon,
-      latitudeDelta: deltaLat,
-      longitudeDelta: deltaLon,
-    };
-  };
-
-  // Web version - interactive list with add/edit functionality
-  if (Platform.OS === 'web') {
-    const handleAddPoint = (useExactLocation = false) => {
-      // Add a point near current location or default
-      const baseLat = currentLocation?.lat || 37.7749;
-      const baseLon = currentLocation?.lon || -122.4194;
-
-      const newPoint: WorkPoint = {
-        id: `wp-${Date.now()}`,
-        seq: workPoints.length,
-        lat: useExactLocation ? baseLat : baseLat + (Math.random() - 0.5) * 0.001,
-        lon: useExactLocation ? baseLon : baseLon + (Math.random() - 0.5) * 0.001,
-        implementLowered: false,
-        tillerOn: false,
-        pumpOn: false,
-        label: `Point ${workPoints.length + 1}`,
-      };
-      addWorkPoint(newPoint);
-      onPointAdded?.(newPoint);
-
-      // Show action configuration prompt
-      if (editable && typeof window !== 'undefined') {
-        const configure = window.confirm(
-          `Point ${workPoints.length + 1} added!\n\nWould you like to configure machine actions for this point?`
-        );
-        if (configure) {
-          selectWorkPoint(newPoint.id);
-          onPointSelect?.(newPoint.id);
-        }
-      }
-    };
-
-    const handleToggleAction = (
-      pointId: string,
-      action: 'implementLowered' | 'tillerOn' | 'pumpOn'
-    ) => {
-      const point = workPoints.find((p) => p.id === pointId);
-      if (point) {
-        updateWorkPoint(pointId, { [action]: !point[action] });
-      }
-    };
-
-    const handleDeletePoint = (pointId: string) => {
-      removeWorkPoint(pointId);
-    };
-
-    const handleAddCorner = () => {
-      const baseLat = currentLocation?.lat || 37.7749;
-      const baseLon = currentLocation?.lon || -122.4194;
-      setBoundary([
-        ...boundary,
-        {
-          lat: baseLat + (Math.random() - 0.5) * 0.001,
-          lon: baseLon + (Math.random() - 0.5) * 0.001,
-        },
-      ]);
-    };
-
-    return (
-      <View style={styles.webContainer}>
-        <View style={styles.webHeader}>
-          <Text style={styles.webTitle}>Field Plan</Text>
-          {editable && mode === 'boundary' && (
-            <View style={styles.webHeaderButtons}>
-              <TouchableOpacity style={styles.addButton} onPress={handleAddCorner}>
-                <Ionicons name="add-circle" size={20} color={Colors.warning} />
-                <Text style={styles.addButtonText}>Add Corner ({boundary.length})</Text>
-              </TouchableOpacity>
-              {boundary.length > 0 && (
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={() => setBoundary(boundary.slice(0, -1))}
-                >
-                  <Ionicons name="arrow-undo" size={20} color={Colors.textSecondary} />
-                  <Text style={styles.addButtonText}>Undo</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-          {editable && mode === 'points' && (
-            <View style={styles.webHeaderButtons}>
-              {currentLocation && (
-                <TouchableOpacity style={styles.addButton} onPress={() => handleAddPoint(true)}>
-                  <Ionicons name="locate" size={20} color={Colors.primary} />
-                  <Text style={styles.addButtonText}>Add at My Location</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.addButton} onPress={() => handleAddPoint(false)}>
-                <Ionicons name="add-circle" size={20} color={Colors.primary} />
-                <Text style={styles.addButtonText}>Add Point</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        {/* Location Status */}
-        <View style={styles.webLocationStatus}>
-          <Ionicons
-            name={currentLocation ? 'location' : 'location-outline'}
-            size={16}
-            color={currentLocation ? Colors.success : Colors.textSecondary}
-          />
-          <Text style={styles.webLocationText}>
-            {isLoadingLocation
-              ? 'Getting location...'
-              : currentLocation
-              ? `Your location: ${currentLocation.lat.toFixed(5)}, ${currentLocation.lon.toFixed(5)}`
-              : locationPermission === false
-              ? 'Location access denied. Enable in browser settings.'
-              : 'Location unavailable'}
-          </Text>
-        </View>
-
-        <Text style={styles.webSubtitle}>
-          {workPoints.length === 0
-            ? 'No work points added. Click "Add Point" to create waypoints.'
-            : `${workPoints.length} work point${workPoints.length > 1 ? 's' : ''} in plan`}
-        </Text>
-
-        <ScrollView style={styles.pointsList}>
-          {workPoints.map((point, index) => (
-            <View
-              key={point.id}
-              style={[
-                styles.pointItem,
-                selectedPointId === point.id && styles.pointItemSelected,
-              ]}
-            >
-              <TouchableOpacity
-                style={styles.pointHeader}
-                onPress={() => handleMarkerPress(point.id)}
-              >
-                <View style={styles.pointNumber}>
-                  <Text style={styles.pointNumberText}>{index + 1}</Text>
-                </View>
-                <View style={styles.pointInfo}>
-                  <Text style={styles.pointLabel}>{point.label}</Text>
-                  <Text style={styles.pointCoords}>
-                    {point.lat.toFixed(6)}, {point.lon.toFixed(6)}
-                  </Text>
-                </View>
-                {editable && (
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDeletePoint(point.id)}
-                  >
-                    <Ionicons name="trash-outline" size={20} color={Colors.danger} />
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
-
-              <View style={styles.pointActions}>
-                <TouchableOpacity
-                  style={[
-                    styles.actionButton,
-                    point.implementLowered && styles.actionButtonActive,
-                  ]}
-                  onPress={() => handleToggleAction(point.id, 'implementLowered')}
-                  disabled={!editable}
-                >
-                  <Ionicons
-                    name="arrow-down"
-                    size={16}
-                    color={point.implementLowered ? Colors.textPrimary : Colors.textSecondary}
-                  />
-                  <Text
-                    style={[styles.actionText, point.implementLowered && styles.actionTextActive]}
-                  >
-                    {point.implementLowered ? 'Lowered' : 'Raised'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionButton, point.tillerOn && styles.actionButtonActive]}
-                  onPress={() => handleToggleAction(point.id, 'tillerOn')}
-                  disabled={!editable}
-                >
-                  <Ionicons
-                    name="cog"
-                    size={16}
-                    color={point.tillerOn ? Colors.textPrimary : Colors.textSecondary}
-                  />
-                  <Text style={[styles.actionText, point.tillerOn && styles.actionTextActive]}>
-                    Tiller {point.tillerOn ? 'ON' : 'OFF'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.actionButton, point.pumpOn && styles.actionButtonActive]}
-                  onPress={() => handleToggleAction(point.id, 'pumpOn')}
-                  disabled={!editable}
-                >
-                  <Ionicons
-                    name="water"
-                    size={16}
-                    color={point.pumpOn ? Colors.textPrimary : Colors.textSecondary}
-                  />
-                  <Text style={[styles.actionText, point.pumpOn && styles.actionTextActive]}>
-                    Pump {point.pumpOn ? 'ON' : 'OFF'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
-    );
-  }
-
-  // Loading state
+  // Loading / permission states — shared across platforms
   if (isLoadingLocation) {
     return (
       <View style={styles.loadingContainer}>
@@ -520,7 +340,6 @@ export default function FieldMap({
     );
   }
 
-  // Permission denied state
   if (locationPermission === false) {
     return (
       <View style={styles.permissionContainer}>
@@ -538,124 +357,286 @@ export default function FieldMap({
             {isRetryingPermission ? 'Requesting...' : 'Grant Permission'}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.skipButton}
-          onPress={handleContinueWithoutLocation}
-        >
+        <TouchableOpacity style={styles.skipButton} onPress={handleContinueWithoutLocation}>
           <Text style={styles.skipButtonText}>Continue Without Location</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // Native version with actual map
+  // ────────────────────────────────────────────────────────────────
+  // Web branch (react-map-gl / maplibre-gl)
+  // ────────────────────────────────────────────────────────────────
+  if (Platform.OS === 'web') {
+    if (!WebMap) {
+      return (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Map not available on this platform</Text>
+        </View>
+      );
+    }
+    // Inline GeoJSON layers; markers are absolutely positioned via <Marker>
+    return (
+      <View style={styles.container}>
+        <WebMap
+          ref={webMapRef}
+          initialViewState={{
+            latitude: mapRegion.latitude,
+            longitude: mapRegion.longitude,
+            zoom: 15,
+          }}
+          mapStyle={JSON.parse(styleJSON)}
+          style={{ width: '100%', height: '100%' }}
+          onClick={(e: any) => handleMapPress(e.lngLat.lat, e.lngLat.lng)}
+        >
+          {boundaryFeature && (
+            <WebSource id="boundary-src" type="geojson" data={boundaryFeature}>
+              <WebLayer id="boundary-fill" type="fill" paint={{ 'fill-color': Colors.primary, 'fill-opacity': 0.15 }} />
+              <WebLayer id="boundary-line" type="line" paint={{ 'line-color': Colors.warning, 'line-width': 2 }} />
+            </WebSource>
+          )}
+          {partialBoundaryFeature && (
+            <WebSource id="partial-src" type="geojson" data={partialBoundaryFeature}>
+              <WebLayer id="partial-line" type="line" paint={{ 'line-color': Colors.warning, 'line-width': 2 }} />
+            </WebSource>
+          )}
+          {pathFeature && (
+            <WebSource id="path-src" type="geojson" data={pathFeature}>
+              <WebLayer
+                id="path-line"
+                type="line"
+                paint={{ 'line-color': Colors.primary, 'line-width': 3, 'line-dasharray': [2, 1] }}
+              />
+            </WebSource>
+          )}
+          {breadcrumbFeature && (
+            <WebSource id="breadcrumb-src" type="geojson" data={breadcrumbFeature}>
+              <WebLayer id="breadcrumb-line" type="line" paint={{ 'line-color': Colors.warning, 'line-width': 3 }} />
+            </WebSource>
+          )}
+          {mode === 'boundary' &&
+            boundary.map((b, i) => (
+              <WebMarker key={`corner-${i}`} longitude={b.lon} latitude={b.lat} anchor="center">
+                <View style={styles.cornerMarker}>
+                  <Text style={styles.cornerMarkerText}>{i + 1}</Text>
+                </View>
+              </WebMarker>
+            ))}
+          {workPoints.map((point, index) => (
+            <WebMarker
+              key={point.id}
+              longitude={point.lon}
+              latitude={point.lat}
+              anchor="center"
+              onClick={(e: any) => {
+                e.originalEvent?.stopPropagation?.();
+                handleMarkerPress(point.id);
+              }}
+            >
+              <WorkPointMarker
+                index={index + 1}
+                point={point}
+                isSelected={selectedPointId === point.id || activePointNumber === index + 1}
+              />
+            </WebMarker>
+          ))}
+          {machineLocation && (
+            <WebMarker longitude={machineLocation.lon} latitude={machineLocation.lat} anchor="center">
+              <View style={styles.machineMarker}>
+                <View
+                  style={[
+                    styles.machineArrow,
+                    machineHeading != null && { transform: [{ rotate: `${machineHeading}deg` }] },
+                  ]}
+                >
+                  <Ionicons name="navigate" size={32} color={Colors.warning} />
+                </View>
+              </View>
+            </WebMarker>
+          )}
+        </WebMap>
+        {renderOverlays({
+          mode,
+          boundary,
+          workPoints,
+          machineLocation,
+          onCenterUser: currentLocation ? centerOnUser : null,
+          onCenterMachine: machineLocation ? centerOnMachine : null,
+          onFitPoints: workPoints.length > 0 ? fitToPoints : null,
+          onUndoCorner: boundary.length > 0 ? () => setBoundary(boundary.slice(0, -1)) : null,
+          editable,
+          attribution: ATTRIBUTIONS[baseMap],
+        })}
+      </View>
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // Native branch (@maplibre/maplibre-react-native)
+  // ────────────────────────────────────────────────────────────────
+  if (!RNMap) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Map library not available</Text>
+      </View>
+    );
+  }
+
+  const { MapView, Camera, ShapeSource, LineLayer, FillLayer, MarkerView, UserLocation } = RNMap;
+
   return (
     <View style={styles.container}>
       <MapView
-        ref={mapRef}
         style={styles.map}
-        mapType="satellite"
-        initialRegion={workPoints.length > 0 ? getRegionForPoints() : mapRegion}
-        onPress={handleMapPress}
-        showsUserLocation={showCurrentLocation}
-        showsMyLocationButton={false}
-        showsCompass
+        styleJSON={styleJSON}
+        onPress={(e: any) => {
+          const coords = e?.geometry?.coordinates;
+          if (Array.isArray(coords) && coords.length === 2) {
+            handleMapPress(coords[1], coords[0]);
+          }
+        }}
+        compassEnabled
         rotateEnabled={false}
-        loadingEnabled
-        loadingIndicatorColor={Colors.primary}
-        loadingBackgroundColor={Colors.background}
+        pitchEnabled={false}
+        logoEnabled={false}
+        attributionEnabled={false}
       >
-        {/* Field boundary polygon */}
-        {boundary.length >= 3 && (
-          <Polygon
-            coordinates={boundary.map((b) => ({ latitude: b.lat, longitude: b.lon }))}
-            strokeColor={Colors.warning}
-            strokeWidth={2}
-            fillColor="rgba(74, 124, 35, 0.15)"
-          />
+        <Camera
+          ref={cameraRef}
+          defaultSettings={{
+            centerCoordinate: [mapRegion.longitude, mapRegion.latitude],
+            zoomLevel: 15,
+          }}
+        />
+        {showCurrentLocation && <UserLocation visible={true} />}
+
+        {boundaryFeature && (
+          <ShapeSource id="boundary-src" shape={boundaryFeature}>
+            <FillLayer id="boundary-fill" style={{ fillColor: Colors.primary, fillOpacity: 0.15 }} />
+            <LineLayer id="boundary-line" style={{ lineColor: Colors.warning, lineWidth: 2 }} />
+          </ShapeSource>
         )}
-        {boundary.length > 0 && boundary.length < 3 && (
-          <Polyline
-            coordinates={boundary.map((b) => ({ latitude: b.lat, longitude: b.lon }))}
-            strokeColor={Colors.warning}
-            strokeWidth={2}
-          />
+        {partialBoundaryFeature && (
+          <ShapeSource id="partial-src" shape={partialBoundaryFeature}>
+            <LineLayer id="partial-line" style={{ lineColor: Colors.warning, lineWidth: 2 }} />
+          </ShapeSource>
         )}
+        {pathFeature && (
+          <ShapeSource id="path-src" shape={pathFeature}>
+            <LineLayer id="path-line" style={{ lineColor: Colors.primary, lineWidth: 3, lineDasharray: [2, 1] }} />
+          </ShapeSource>
+        )}
+        {breadcrumbFeature && (
+          <ShapeSource id="breadcrumb-src" shape={breadcrumbFeature}>
+            <LineLayer id="breadcrumb-line" style={{ lineColor: Colors.warning, lineWidth: 3 }} />
+          </ShapeSource>
+        )}
+
         {mode === 'boundary' &&
           boundary.map((b, i) => (
-            <Marker
-              key={`corner-${i}`}
-              coordinate={{ latitude: b.lat, longitude: b.lon }}
-              anchor={{ x: 0.5, y: 0.5 }}
-            >
+            <MarkerView key={`corner-${i}`} coordinate={[b.lon, b.lat]} anchor={{ x: 0.5, y: 0.5 }}>
               <View style={styles.cornerMarker}>
                 <Text style={styles.cornerMarkerText}>{i + 1}</Text>
               </View>
-            </Marker>
+            </MarkerView>
           ))}
 
-        {/* Path polyline */}
-        {showPath && pathCoordinates.length > 1 && (
-          <Polyline
-            coordinates={pathCoordinates}
-            strokeColor={Colors.primary}
-            strokeWidth={3}
-            lineDashPattern={[10, 5]}
-          />
-        )}
-
-        {/* Work point markers */}
         {workPoints.map((point, index) => (
-          <Marker
+          <MarkerView
             key={point.id}
-            coordinate={{ latitude: point.lat, longitude: point.lon }}
-            onPress={() => handleMarkerPress(point.id)}
+            coordinate={[point.lon, point.lat]}
             anchor={{ x: 0.5, y: 0.5 }}
           >
-            <WorkPointMarker
-              index={index + 1}
-              point={point}
-              isSelected={selectedPointId === point.id}
-            />
-          </Marker>
+            <TouchableOpacity onPress={() => handleMarkerPress(point.id)}>
+              <WorkPointMarker
+                index={index + 1}
+                point={point}
+                isSelected={selectedPointId === point.id || activePointNumber === index + 1}
+              />
+            </TouchableOpacity>
+          </MarkerView>
         ))}
 
-        {/* Machine location marker */}
         {machineLocation && (
-          <Marker
-            coordinate={{ latitude: machineLocation.lat, longitude: machineLocation.lon }}
+          <MarkerView
+            coordinate={[machineLocation.lon, machineLocation.lat]}
             anchor={{ x: 0.5, y: 0.5 }}
           >
             <View style={styles.machineMarker}>
-              <View style={[
-                styles.machineArrow,
-                machineHeading != null && { transform: [{ rotate: `${machineHeading}deg` }] }
-              ]}>
+              <View
+                style={[
+                  styles.machineArrow,
+                  machineHeading != null && { transform: [{ rotate: `${machineHeading}deg` }] },
+                ]}
+              >
                 <Ionicons name="navigate" size={32} color={Colors.warning} />
               </View>
             </View>
-          </Marker>
+          </MarkerView>
         )}
       </MapView>
 
-      {/* Map controls */}
+      {renderOverlays({
+        mode,
+        boundary,
+        workPoints,
+        machineLocation,
+        onCenterUser: currentLocation ? centerOnUser : null,
+        onCenterMachine: machineLocation ? centerOnMachine : null,
+        onFitPoints: workPoints.length > 0 ? fitToPoints : null,
+        onUndoCorner: boundary.length > 0 ? () => setBoundary(boundary.slice(0, -1)) : null,
+        editable,
+        attribution: ATTRIBUTIONS[baseMap],
+      })}
+    </View>
+  );
+}
+
+// Overlays are identical between platforms — hoisted so the two branches
+// don't drift out of sync.
+function renderOverlays({
+  mode,
+  boundary,
+  workPoints,
+  machineLocation,
+  onCenterUser,
+  onCenterMachine,
+  onFitPoints,
+  onUndoCorner,
+  editable,
+  attribution,
+}: {
+  mode: 'points' | 'boundary';
+  boundary: { lat: number; lon: number }[];
+  workPoints: WorkPoint[];
+  machineLocation?: { lat: number; lon: number } | null;
+  onCenterUser: (() => void) | null;
+  onCenterMachine: (() => void) | null;
+  onFitPoints: (() => void) | null;
+  onUndoCorner: (() => void) | null;
+  editable: boolean;
+  attribution: string;
+}) {
+  return (
+    <>
       <View style={styles.mapControls}>
-        {machineLocation && (
-          <TouchableOpacity style={styles.controlButton} onPress={centerOnMachine}>
+        {onCenterMachine && (
+          <TouchableOpacity style={styles.controlButton} onPress={onCenterMachine}>
             <Ionicons name="navigate" size={24} color={Colors.warning} />
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={styles.controlButton} onPress={centerOnUser}>
-          <Ionicons name="locate" size={24} color={Colors.textPrimary} />
-        </TouchableOpacity>
-        {workPoints.length > 0 && (
-          <TouchableOpacity style={styles.controlButton} onPress={fitToPoints}>
+        {onCenterUser && (
+          <TouchableOpacity style={styles.controlButton} onPress={onCenterUser}>
+            <Ionicons name="locate" size={24} color={Colors.textPrimary} />
+          </TouchableOpacity>
+        )}
+        {onFitPoints && (
+          <TouchableOpacity style={styles.controlButton} onPress={onFitPoints}>
             <Ionicons name="scan" size={24} color={Colors.textPrimary} />
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Instructions overlay */}
       {editable && mode === 'boundary' && boundary.length < 3 && (
         <View style={styles.instructionOverlay}>
           <Text style={styles.instructionText}>
@@ -669,22 +650,21 @@ export default function FieldMap({
         </View>
       )}
 
-      {/* Boundary controls */}
-      {mode === 'boundary' && boundary.length > 0 && (
-        <TouchableOpacity
-          style={styles.undoCornerButton}
-          onPress={() => setBoundary(boundary.slice(0, -1))}
-        >
+      {mode === 'boundary' && onUndoCorner && (
+        <TouchableOpacity style={styles.undoCornerButton} onPress={onUndoCorner}>
           <Ionicons name="arrow-undo" size={18} color={Colors.textPrimary} />
           <Text style={styles.undoCornerText}>Undo corner</Text>
         </TouchableOpacity>
       )}
 
-      {/* Point count badge */}
       <View style={styles.countBadge}>
         <Text style={styles.countText}>{workPoints.length} points</Text>
       </View>
-    </View>
+
+      <View style={styles.attributionBadge}>
+        <Text style={styles.attributionText}>{attribution}</Text>
+      </View>
+    </>
   );
 }
 
@@ -804,6 +784,19 @@ const styles = StyleSheet.create({
     fontSize: Layout.fontSize.sm,
     fontWeight: '600',
   },
+  attributionBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  attributionText: {
+    fontSize: 10,
+    color: Colors.textPrimary,
+  },
   cornerMarker: {
     width: 24,
     height: 24,
@@ -847,140 +840,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 5,
-  },
-  // Web styles
-  webContainer: {
-    flex: 1,
-    backgroundColor: Colors.surface,
-    borderRadius: Layout.radius.md,
-    padding: Layout.spacing.md,
-  },
-  webHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Layout.spacing.sm,
-    flexWrap: 'wrap',
-    gap: Layout.spacing.sm,
-  },
-  webHeaderButtons: {
-    flexDirection: 'row',
-    gap: Layout.spacing.sm,
-    flexWrap: 'wrap',
-  },
-  webTitle: {
-    fontSize: Layout.fontSize.xl,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  webLocationStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surfaceLight,
-    paddingHorizontal: Layout.spacing.md,
-    paddingVertical: Layout.spacing.sm,
-    borderRadius: Layout.radius.sm,
-    marginBottom: Layout.spacing.sm,
-    gap: Layout.spacing.sm,
-  },
-  webLocationText: {
-    fontSize: Layout.fontSize.sm,
-    color: Colors.textSecondary,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surfaceLight,
-    paddingHorizontal: Layout.spacing.md,
-    paddingVertical: Layout.spacing.sm,
-    borderRadius: Layout.radius.md,
-    gap: Layout.spacing.xs,
-  },
-  addButtonText: {
-    color: Colors.primary,
-    fontSize: Layout.fontSize.md,
-    fontWeight: '500',
-  },
-  webSubtitle: {
-    fontSize: Layout.fontSize.sm,
-    color: Colors.textSecondary,
-    marginBottom: Layout.spacing.md,
-  },
-  pointsList: {
-    flex: 1,
-  },
-  pointItem: {
-    backgroundColor: Colors.surfaceLight,
-    borderRadius: Layout.radius.md,
-    padding: Layout.spacing.md,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    marginBottom: Layout.spacing.sm,
-  },
-  pointItemSelected: {
-    borderColor: Colors.primary,
-  },
-  pointHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Layout.spacing.sm,
-  },
-  pointNumber: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: Layout.spacing.md,
-  },
-  pointNumberText: {
-    color: Colors.textPrimary,
-    fontSize: Layout.fontSize.md,
-    fontWeight: '700',
-  },
-  pointInfo: {
-    flex: 1,
-  },
-  pointLabel: {
-    fontSize: Layout.fontSize.md,
-    fontWeight: '500',
-    color: Colors.textPrimary,
-  },
-  pointCoords: {
-    fontSize: Layout.fontSize.xs,
-    color: Colors.textSecondary,
-  },
-  deleteButton: {
-    padding: Layout.spacing.sm,
-  },
-  pointActions: {
-    flexDirection: 'row',
-    gap: Layout.spacing.sm,
-  },
-  actionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.surface,
-    paddingVertical: Layout.spacing.sm,
-    paddingHorizontal: Layout.spacing.sm,
-    borderRadius: Layout.radius.sm,
-    gap: Layout.spacing.xs,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  actionButtonActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  actionText: {
-    fontSize: Layout.fontSize.xs,
-    color: Colors.textSecondary,
-  },
-  actionTextActive: {
-    color: Colors.textPrimary,
-    fontWeight: '500',
   },
 });
