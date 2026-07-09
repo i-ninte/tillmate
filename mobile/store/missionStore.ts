@@ -1,5 +1,7 @@
 import { create } from 'zustand';
-import { FieldPlan, FieldPlanSummary, WorkPoint, MissionUploadState, MissionUploadProgress } from '../types/mission';
+import { FieldPlan, FieldPlanSummary, WorkPoint, MissionUploadState, MissionUploadProgress, Operation, BoundaryPoint } from '../types/mission';
+import { generateCoveragePath } from '../services/coveragePlanner';
+import { OPERATIONS, applyOperationToPoints, buildWorkPointsFromPath } from '../services/operations';
 
 interface MissionState {
   // Current field plan being edited
@@ -30,6 +32,13 @@ interface MissionState {
 
   // Actions - Selection
   selectWorkPoint: (id: string | null) => void;
+
+  // Actions - Operation & Coverage
+  setOperation: (operation: Operation) => void;
+  setDepthCm: (depthCm: number) => void;
+  setImplementWidth: (widthM: number) => void;
+  setBoundary: (boundary: BoundaryPoint[]) => void;
+  generatePath: () => { ok: boolean; error?: string };
 
   // Actions - Return to Home
   setReturnToHome: (enabled: boolean) => void;
@@ -137,6 +146,63 @@ export const useMissionStore = create<MissionState>((set, get) => ({
   }),
 
   selectWorkPoint: (id) => set({ selectedPointId: id }),
+
+  // Changing the operation re-applies implement states to ALL existing points
+  setOperation: (operation) => set((state) => {
+    if (!state.currentPlan) return {};
+    const cfg = OPERATIONS[operation];
+    const newPoints = applyOperationToPoints(state.workPoints, operation);
+    const depthCm = cfg.needsDepth
+      ? state.currentPlan.depthCm ?? cfg.defaultDepthCm
+      : 0;
+    return {
+      workPoints: newPoints,
+      currentPlan: { ...state.currentPlan, operation, depthCm, workPoints: newPoints },
+    };
+  }),
+
+  setDepthCm: (depthCm) => set((state) => ({
+    currentPlan: state.currentPlan
+      ? { ...state.currentPlan, depthCm }
+      : null,
+  })),
+
+  setImplementWidth: (widthM) => set((state) => ({
+    currentPlan: state.currentPlan
+      ? { ...state.currentPlan, implementWidthM: widthM }
+      : null,
+  })),
+
+  setBoundary: (boundary) => set((state) => ({
+    currentPlan: state.currentPlan
+      ? { ...state.currentPlan, boundary }
+      : null,
+  })),
+
+  generatePath: () => {
+    const state = get();
+    const plan = state.currentPlan;
+    if (!plan) return { ok: false, error: 'No plan started' };
+    if (!plan.boundary || plan.boundary.length < 3) {
+      return { ok: false, error: 'Draw the field boundary first (at least 3 corners)' };
+    }
+    if (!plan.operation) {
+      return { ok: false, error: 'Choose an operation first' };
+    }
+    const widthM = plan.implementWidthM ?? 1;
+    try {
+      const path = generateCoveragePath(plan.boundary, { implementWidthM: widthM });
+      const workPoints = buildWorkPointsFromPath(path, plan.operation);
+      set({
+        workPoints,
+        currentPlan: { ...plan, workPoints },
+        selectedPointId: null,
+      });
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'Path generation failed' };
+    }
+  },
 
   setReturnToHome: (enabled) => set((state) => ({
     currentPlan: state.currentPlan

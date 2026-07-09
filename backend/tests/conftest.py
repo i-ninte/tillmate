@@ -72,7 +72,8 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
-        base_url="http://test"
+        base_url="http://test",
+        follow_redirects=True,
     ) as client:
         yield client
 

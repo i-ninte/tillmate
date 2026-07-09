@@ -39,6 +39,7 @@ function createFieldPlan(workPoints: WorkPoint[]): FieldPlan {
     machineId: 1,
     name: 'Test Plan',
     workPoints,
+    returnToHome: false,
   };
 }
 

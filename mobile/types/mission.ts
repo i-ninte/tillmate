@@ -3,6 +3,15 @@
  * Using farmer-friendly terminology
  */
 
+// Field operation types (farmer-facing)
+export type Operation = 'tilling' | 'weeding' | 'spraying';
+
+// A point on the field boundary polygon
+export interface BoundaryPoint {
+  lat: number;
+  lon: number;
+}
+
 // A single work point in a field plan
 export interface WorkPoint {
   id: string;           // UUID for local tracking
@@ -28,6 +37,10 @@ export interface FieldPlan {
   notes?: string;           // Optional notes
   workPoints: WorkPoint[];  // Ordered list of work points
   returnToHome: boolean;    // Return to starting position after mission
+  operation?: Operation;    // Selected field operation
+  depthCm?: number;         // Working depth for tilling/weeding
+  implementWidthM?: number; // Implement width used to generate the path
+  boundary?: BoundaryPoint[]; // Field boundary polygon drawn by farmer
   homeLocation?: {          // Starting position (first point or custom)
     lat: number;
     lon: number;
@@ -42,6 +55,10 @@ export interface FieldPlanCreate {
   name: string;
   notes?: string;
   returnToHome?: boolean;
+  operation?: Operation;
+  depthCm?: number;
+  implementWidthM?: number;
+  boundary?: BoundaryPoint[];
   homeLocation?: {
     lat: number;
     lon: number;

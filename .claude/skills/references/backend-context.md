@@ -237,13 +237,17 @@ alembic upgrade head
 | 2026-03-28 | Added satellites, heading_deg, headlights_on to TelemetryLog | models/telemetry_log.py, schemas/telemetry_log.py |
 | 2026-03-28 | Updated MissionService for new fields | services/mission_service.py |
 | 2026-03-28 | Created migration for schema changes | alembic/versions/3f1bbb4c9d02_*.py |
+| 2026-07-09 | Added operation, depth_cm, implement_width_m, boundary (JSON) to FieldPlan | models/mission.py, schemas/mission.py, services/mission_service.py |
+| 2026-07-09 | Added implement_width_m to Machine | models/machine.py, schemas/machine.py |
+| 2026-07-09 | Mission create now 404s on unknown machine_id | routers/missions.py |
+| 2026-07-09 | Fixed test suite (follow_redirects, 201/ok expectations) + operation tests | tests/conftest.py, tests/test_*.py |
+| 2026-07-09 | Migration 58d52e5e867c applied (operation/boundary/width columns) | alembic/versions/58d52e5e867c_*.py |
 
 ---
 
 ## Known Issues / TODOs
 
-- Need to verify MySQL database exists and is accessible before running migrations
-- May need to install test dependencies: `pip install pytest pytest-asyncio httpx aiosqlite`
+- Use the existing virtualenv at `/backend/tillmate` (test deps pytest/pytest-asyncio/httpx/aiosqlite are installed there)
 
 ---
 

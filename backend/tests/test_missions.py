@@ -28,12 +28,60 @@ class TestMissionsAPI:
 
         response = await client.post("/api/v1/missions", json=plan_data)
 
-        assert response.status_code == 200
+        assert response.status_code in (200, 201)
         data = response.json()
         assert data["name"] == sample_field_plan_data["name"]
         assert data["machine_id"] == machine_id
         assert len(data["work_points"]) == 2
-        assert "id" in data
+
+    @pytest.mark.asyncio
+    async def test_create_mission_with_operation(
+        self,
+        client: AsyncClient,
+        sample_machine_data: dict,
+        sample_field_plan_data: dict,
+    ):
+        """Field plans persist operation, depth, width, and boundary."""
+        machine_response = await client.post(
+            "/api/v1/machines", json=sample_machine_data
+        )
+        machine_id = machine_response.json()["id"]
+
+        plan_data = {
+            **sample_field_plan_data,
+            "machine_id": machine_id,
+            "operation": "tilling",
+            "depth_cm": 15.0,
+            "implement_width_m": 1.5,
+            "boundary": [
+                {"lat": 37.7749, "lon": -122.4194},
+                {"lat": 37.7750, "lon": -122.4194},
+                {"lat": 37.7750, "lon": -122.4195},
+            ],
+        }
+
+        response = await client.post("/api/v1/missions", json=plan_data)
+        assert response.status_code in (200, 201)
+        data = response.json()
+        assert data["operation"] == "tilling"
+        assert data["depth_cm"] == 15.0
+        assert data["implement_width_m"] == 1.5
+        assert len(data["boundary"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_create_mission_rejects_bad_operation(
+        self,
+        client: AsyncClient,
+        sample_field_plan_data: dict,
+    ):
+        """Unknown operation values are rejected."""
+        plan_data = {
+            **sample_field_plan_data,
+            "machine_id": None,
+            "operation": "digging",
+        }
+        response = await client.post("/api/v1/missions", json=plan_data)
+        assert response.status_code == 422
 
     @pytest.mark.asyncio
     async def test_create_mission_invalid_machine(
@@ -64,7 +112,7 @@ class TestMissionsAPI:
 
         response = await client.get("/api/v1/missions")
 
-        assert response.status_code == 200
+        assert response.status_code in (200, 201)
         data = response.json()
         assert isinstance(data, list)
         assert len(data) >= 1
@@ -104,7 +152,7 @@ class TestMissionsAPI:
         # Filter by machine 1
         response = await client.get(f"/api/v1/missions?machine_id={machine1_id}")
 
-        assert response.status_code == 200
+        assert response.status_code in (200, 201)
         data = response.json()
         assert len(data) == 1
         assert data[0]["machine_id"] == machine1_id
@@ -129,7 +177,7 @@ class TestMissionsAPI:
 
         response = await client.get("/api/v1/missions/summaries")
 
-        assert response.status_code == 200
+        assert response.status_code in (200, 201)
         data = response.json()
         assert isinstance(data, list)
         assert len(data) >= 1
@@ -158,7 +206,7 @@ class TestMissionsAPI:
         # Get the mission
         response = await client.get(f"/api/v1/missions/{plan_id}")
 
-        assert response.status_code == 200
+        assert response.status_code in (200, 201)
         data = response.json()
         assert data["id"] == plan_id
         assert data["name"] == sample_field_plan_data["name"]

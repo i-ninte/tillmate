@@ -1,5 +1,15 @@
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel
+
+Operation = Literal["tilling", "weeding", "spraying"]
+
+
+class BoundaryPoint(BaseModel):
+    """A corner of the field boundary polygon."""
+
+    lat: float
+    lon: float
 
 
 class WorkPointBase(BaseModel):
@@ -37,6 +47,10 @@ class FieldPlanCreate(BaseModel):
     notes: str | None = None
     return_to_home: bool = True
     home_location: HomeLocation | None = None
+    operation: Operation | None = None
+    depth_cm: float | None = None
+    implement_width_m: float | None = None
+    boundary: list[BoundaryPoint] | None = None
     work_points: list[WorkPointBase]
 
 
@@ -50,6 +64,10 @@ class FieldPlanResponse(BaseModel):
     return_to_home: bool
     home_lat: float | None
     home_lon: float | None
+    operation: str | None
+    depth_cm: float | None
+    implement_width_m: float | None
+    boundary: list[dict] | None
     created_at: datetime
     updated_at: datetime
     work_points: list[WorkPointResponse]
@@ -65,6 +83,7 @@ class FieldPlanSummary(BaseModel):
     name: str
     notes: str | None
     return_to_home: bool
+    operation: str | None = None
     point_count: int
     created_at: datetime
 

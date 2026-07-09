@@ -20,6 +20,9 @@ class Machine(Base):
     actuator_pwm_min: Mapped[int] = mapped_column(default=1000)
     actuator_pwm_max: Mapped[int] = mapped_column(default=2000)
 
+    # Implement working width — used to generate coverage paths
+    implement_width_m: Mapped[float] = mapped_column(Float, default=1.0)
+
     # Battery thresholds
     battery_warn_v: Mapped[float] = mapped_column(Float, default=44.0)
     battery_critical_v: Mapped[float] = mapped_column(Float, default=42.0)

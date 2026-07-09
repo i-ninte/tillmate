@@ -12,6 +12,7 @@ class MachineCreate(BaseModel):
     actuator_max_mm: float = 200.0
     actuator_pwm_min: int = 1000
     actuator_pwm_max: int = 2000
+    implement_width_m: float = 1.0
     battery_warn_v: float = 44.0
     battery_critical_v: float = 42.0
 
@@ -25,6 +26,7 @@ class MachineUpdate(BaseModel):
     actuator_max_mm: float | None = None
     actuator_pwm_min: int | None = None
     actuator_pwm_max: int | None = None
+    implement_width_m: float | None = None
     battery_warn_v: float | None = None
     battery_critical_v: float | None = None
 
@@ -40,6 +42,7 @@ class MachineResponse(BaseModel):
     actuator_max_mm: float
     actuator_pwm_min: int
     actuator_pwm_max: int
+    implement_width_m: float
     battery_warn_v: float
     battery_critical_v: float
     created_at: datetime

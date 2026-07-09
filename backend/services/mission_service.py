@@ -21,6 +21,10 @@ class MissionService:
             return_to_home=data.return_to_home,
             home_lat=data.home_location.lat if data.home_location else None,
             home_lon=data.home_location.lon if data.home_location else None,
+            operation=data.operation,
+            depth_cm=data.depth_cm,
+            implement_width_m=data.implement_width_m,
+            boundary=[b.model_dump() for b in data.boundary] if data.boundary else None,
         )
 
         # Create work points
@@ -70,6 +74,7 @@ class MissionService:
                 FieldPlan.name,
                 FieldPlan.notes,
                 FieldPlan.return_to_home,
+                FieldPlan.operation,
                 FieldPlan.created_at,
                 func.count(WorkPoint.id).label("point_count"),
             )
@@ -91,6 +96,7 @@ class MissionService:
                 "name": row.name,
                 "notes": row.notes,
                 "return_to_home": row.return_to_home,
+                "operation": row.operation,
                 "point_count": row.point_count,
                 "created_at": row.created_at,
             }
